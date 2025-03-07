@@ -1,9 +1,9 @@
 
 import { useState } from "react";
-import { uploadFile, STORAGE_BUCKETS } from "@/lib/storage-utils";
+import { uploadFile, getFileUrl } from "@/lib/storage-utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
-import { Spinner } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 interface FileUploadProps {
   bucketName: string;
@@ -64,7 +64,7 @@ const FileUpload = ({
       await uploadFile(bucketName, filePath, file);
 
       // Get the public URL
-      const publicUrl = `${window.location.origin}/storage/v1/object/public/${bucketName}/${filePath}`;
+      const publicUrl = getFileUrl(bucketName, filePath);
 
       toast({
         title: "Upload successful",
@@ -99,7 +99,7 @@ const FileUpload = ({
         >
           {isUploading ? (
             <>
-              <Spinner className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Uploading...
             </>
           ) : (

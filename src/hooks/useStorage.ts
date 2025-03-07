@@ -8,10 +8,7 @@ interface StorageFile {
   updated_at: string;
   created_at: string;
   last_accessed_at: string;
-  metadata: {
-    size: number;
-    mimetype: string;
-  };
+  metadata: Record<string, any>; // Changed from specific shape to Record<string, any>
   publicUrl: string;
 }
 
@@ -45,7 +42,7 @@ export function useStorage({
           publicUrl: getFileUrl(bucketName, folderPath ? `${folderPath}/${file.name}` : file.name),
         }));
       
-      setFiles(enhancedFiles);
+      setFiles(enhancedFiles as StorageFile[]);
     } catch (err) {
       console.error("Error fetching files:", err);
       setError(err instanceof Error ? err : new Error("Failed to fetch files"));
