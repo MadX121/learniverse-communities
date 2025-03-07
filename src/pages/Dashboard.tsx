@@ -1,4 +1,3 @@
-
 import { useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import ActivityFeed from "@/components/dashboard/ActivityFeed";
@@ -7,12 +6,24 @@ import ProjectsOverview from "@/components/dashboard/ProjectsOverview";
 import CommunitiesOverview from "@/components/dashboard/CommunitiesOverview";
 import InterviewPrep from "@/components/dashboard/InterviewPrep";
 import DashboardStats from "@/components/dashboard/DashboardStats";
+import FileUpload from "@/components/FileUpload";
+import { STORAGE_BUCKETS } from "@/lib/storage-utils";
+import { useToast } from "@/components/ui/use-toast";
 import { Sparkles } from "lucide-react";
 
 const Dashboard = () => {
+  const { toast } = useToast();
+  
   useEffect(() => {
     document.title = "Dashboard | Learniverse";
   }, []);
+
+  const handleUploadComplete = (filePath: string, url: string) => {
+    toast({
+      title: "File uploaded to Dashboard",
+      description: `File path: ${filePath}`,
+    });
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -25,9 +36,17 @@ const Dashboard = () => {
             <p className="text-muted-foreground">Welcome back! Here's what's happening today.</p>
           </div>
           
-          <div className="flex items-center gap-2 text-sm text-primary bg-primary/10 py-1 px-3 rounded-full">
-            <Sparkles className="w-4 h-4" />
-            <span>Your learning streak: 7 days</span>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 text-sm text-primary bg-primary/10 py-1 px-3 rounded-full">
+              <Sparkles className="w-4 h-4" />
+              <span>Your learning streak: 7 days</span>
+            </div>
+            
+            <FileUpload 
+              bucketName={STORAGE_BUCKETS.DASHBOARD}
+              allowedFileTypes={[".pdf", ".doc", ".docx", ".jpg", ".png"]}
+              onUploadComplete={handleUploadComplete}
+            />
           </div>
         </div>
         
