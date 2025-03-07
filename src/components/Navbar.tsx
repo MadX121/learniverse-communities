@@ -1,13 +1,25 @@
 
 import { useState, useEffect } from "react";
-import { NavLink, useLocation } from "react-router-dom";
-import { Menu, X, ChevronRight } from "lucide-react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Menu, X, ChevronRight, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, signOut, loading } = useAuth();
   
   const isLandingPage = location.pathname === "/";
   
@@ -38,6 +50,17 @@ const Navbar = () => {
     { name: "Projects", path: "/projects" },
     { name: "Interview Prep", path: "/interview-prep" },
   ];
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate("/");
+  };
+
+  const getUserInitials = () => {
+    if (!user) return "U";
+    const email = user.email || "";
+    return email.substring(0, 1).toUpperCase();
+  };
   
   return (
     <nav 
@@ -83,12 +106,43 @@ const Navbar = () => {
           
           {/* Auth Buttons */}
           <div className="hidden md:flex items-center space-x-3">
-            <Button variant="outline" className="text-sm">
-              Log in
-            </Button>
-            <Button className="text-sm bg-primary text-primary-foreground hover:bg-primary/90">
-              Sign up <ChevronRight className="ml-1 h-4 w-4" />
-            </Button>
+            {loading ? (
+              <div className="w-8 h-8 rounded-full bg-secondary animate-pulse"></div>
+            ) : user ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="relative h-8 w-8 rounded-full" aria-label="User menu">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={user.user_metadata.avatar_url} alt={user.email || ""} />
+                      <AvatarFallback>{getUserInitials()}</AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>
+                    {user.email}
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => navigate("/profile")}>
+                    <User className="mr-2 h-4 w-4" />
+                    <span>Profile</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleLogout}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Log out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <>
+                <Button variant="outline" className="text-sm" onClick={() => navigate("/auth")}>
+                  Log in
+                </Button>
+                <Button className="text-sm bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => navigate("/auth?tab=signup")}>
+                  Sign up <ChevronRight className="ml-1 h-4 w-4" />
+                </Button>
+              </>
+            )}
           </div>
           
           {/* Mobile menu button */}
@@ -151,12 +205,41 @@ const Navbar = () => {
             </div>
           </div>
           <div className="p-2 mt-auto space-y-2">
-            <Button variant="outline" className="w-full justify-center">
-              Log in
-            </Button>
-            <Button className="w-full justify-center bg-primary text-primary-foreground hover:bg-primary/90">
-              Sign up
-            </Button>
+            {user ? (
+              <Button 
+                variant="destructive" 
+                className="w-full justify-center"
+                onClick={() => {
+                  handleLogout();
+                  setIsMobileMenuOpen(false);
+                }}
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                Log out
+              </Button>
+            ) : (
+              <>
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-center"
+                  onClick={() => {
+                    navigate("/auth");
+                    setIsMobileMenuOpen(false);
+                  }}
+                >
+                  Log in
+                </Button>
+                <Button 
+                  className="w-full justify-center bg-primary text-primary-foreground hover:bg-primary/90"
+                  onClick={() => {
+                    navigate("/auth?tab=signup");
+                    setIsMobileMenuOpen(false);
+                  }}
+                >
+                  Sign up
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </div>

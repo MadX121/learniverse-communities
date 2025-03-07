@@ -1,4 +1,6 @@
+
 import { useEffect } from "react";
+import { Navigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import ActivityFeed from "@/components/dashboard/ActivityFeed";
 import QuickActions from "@/components/dashboard/QuickActions";
@@ -10,9 +12,11 @@ import FileUpload from "@/components/FileUpload";
 import { STORAGE_BUCKETS } from "@/lib/storage-utils";
 import { useToast } from "@/components/ui/use-toast";
 import { Sparkles } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 const Dashboard = () => {
   const { toast } = useToast();
+  const { user, loading } = useAuth();
   
   useEffect(() => {
     document.title = "Dashboard | Learniverse";
@@ -25,6 +29,19 @@ const Dashboard = () => {
     });
   };
 
+  // Redirect to auth page if not logged in
+  if (!loading && !user) {
+    return <Navigate to="/auth" replace />;
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -33,7 +50,7 @@ const Dashboard = () => {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold">Dashboard</h1>
-            <p className="text-muted-foreground">Welcome back! Here's what's happening today.</p>
+            <p className="text-muted-foreground">Welcome back{user?.user_metadata.username ? `, ${user.user_metadata.username}` : ''}! Here's what's happening today.</p>
           </div>
           
           <div className="flex items-center gap-4">
