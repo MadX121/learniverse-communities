@@ -13,7 +13,8 @@ import {
   ArrowRight,
   Calendar,
   User,
-  Sparkles
+  Sparkles,
+  TrendingUp
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
