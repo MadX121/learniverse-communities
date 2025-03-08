@@ -46,7 +46,13 @@ const ProjectsOverview = () => {
       
       if (error) throw error;
       
-      setProjects(data || []);
+      // Convert status from string to our union type
+      const typedProjects = (data || []).map(project => ({
+        ...project,
+        status: project.status as "in-progress" | "completed" | "planned" | "delayed"
+      }));
+      
+      setProjects(typedProjects);
     } catch (error) {
       console.error("Error fetching projects:", error);
     } finally {

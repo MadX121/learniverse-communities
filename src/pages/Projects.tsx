@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { Plus, Calendar, X, Clock, CheckCircle2, Search } from "lucide-react";
@@ -37,7 +36,6 @@ const Projects = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentFilter, setCurrentFilter] = useState("all");
   
-  // New project form state
   const [newProject, setNewProject] = useState({
     title: "",
     description: "",
@@ -48,7 +46,6 @@ const Projects = () => {
 
   useEffect(() => {
     document.title = "Projects | Learniverse";
-    // Redirect if not logged in
     if (!loading && !user) {
       navigate("/auth");
     }
@@ -143,7 +140,6 @@ const Projects = () => {
         description: "The project has been deleted successfully"
       });
       
-      // Update local state to remove deleted project
       setProjects(projects.filter(project => project.id !== projectId));
     } catch (error) {
       console.error("Error deleting project:", error);
@@ -168,7 +164,6 @@ const Projects = () => {
       
       if (error) throw error;
       
-      // Update local state
       setProjects(projects.map(project => 
         project.id === projectId 
           ? { ...project, status: newStatus, progress: progress } 
@@ -192,12 +187,10 @@ const Projects = () => {
   const filterProjects = (filter: string, search: string) => {
     let filtered = [...projects];
     
-    // Apply status filter
     if (filter !== "all") {
       filtered = filtered.filter(project => project.status === filter);
     }
     
-    // Apply search filter
     if (search.trim() !== "") {
       const searchLower = search.toLowerCase();
       filtered = filtered.filter(project => 
@@ -249,7 +242,6 @@ const Projects = () => {
     }
   };
 
-  // Show loading state while checking authentication
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -258,7 +250,6 @@ const Projects = () => {
     );
   }
 
-  // Redirect if not authenticated
   if (!user) {
     return <Navigate to="/auth" />;
   }
@@ -403,7 +394,6 @@ const Projects = () => {
         </div>
       </main>
 
-      {/* Create Project Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>

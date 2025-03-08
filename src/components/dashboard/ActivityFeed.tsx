@@ -38,7 +38,13 @@ const ActivityFeed = () => {
       
       if (error) throw error;
       
-      setActivities(data || []);
+      // Convert type from string to our union type
+      const typedActivities = (data || []).map(activity => ({
+        ...activity,
+        type: activity.type as "community" | "project" | "interview" | "system"
+      }));
+      
+      setActivities(typedActivities);
     } catch (error) {
       console.error("Error fetching activities:", error);
     } finally {
