@@ -1,6 +1,6 @@
 
 import { useEffect } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import ActivityFeed from "@/components/dashboard/ActivityFeed";
 import QuickActions from "@/components/dashboard/QuickActions";
@@ -17,10 +17,15 @@ import { useAuth } from "@/hooks/useAuth";
 const Dashboard = () => {
   const { toast } = useToast();
   const { user, loading } = useAuth();
+  const navigate = useNavigate();
   
   useEffect(() => {
     document.title = "Dashboard | Learniverse";
-  }, []);
+    // Redirect to auth page if not logged in
+    if (!loading && !user) {
+      navigate("/auth");
+    }
+  }, [loading, user, navigate]);
 
   const handleUploadComplete = (filePath: string, url: string) => {
     toast({
@@ -29,17 +34,18 @@ const Dashboard = () => {
     });
   };
 
-  // Redirect to auth page if not logged in
-  if (!loading && !user) {
-    return <Navigate to="/auth" replace />;
-  }
-
+  // Show loading state while checking authentication
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
       </div>
     );
+  }
+
+  // Redirect if not authenticated
+  if (!user) {
+    return <Navigate to="/auth" />;
   }
 
   return (
@@ -50,7 +56,7 @@ const Dashboard = () => {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold">Dashboard</h1>
-            <p className="text-muted-foreground">Welcome back{user?.user_metadata.username ? `, ${user.user_metadata.username}` : ''}! Here's what's happening today.</p>
+            <p className="text-muted-foreground">Welcome back{user?.user_metadata?.username ? `, ${user.user_metadata.username}` : ''}! Here's what's happening today.</p>
           </div>
           
           <div className="flex items-center gap-4">
