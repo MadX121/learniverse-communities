@@ -9,6 +9,157 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      activities: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          read: boolean | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          read?: boolean | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          read?: boolean | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      communities: {
+        Row: {
+          avatar_color: string | null
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          avatar_color?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          avatar_color?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      community_members: {
+        Row: {
+          community_id: string
+          id: string
+          joined_at: string | null
+          user_id: string
+        }
+        Insert: {
+          community_id: string
+          id?: string
+          joined_at?: string | null
+          user_id: string
+        }
+        Update: {
+          community_id?: string
+          id?: string
+          joined_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "community_members_community_id_fkey"
+            columns: ["community_id"]
+            isOneToOne: false
+            referencedRelation: "communities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      community_messages: {
+        Row: {
+          community_id: string
+          content: string
+          created_at: string | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          community_id: string
+          content: string
+          created_at?: string | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          community_id?: string
+          content?: string
+          created_at?: string | null
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "community_messages_community_id_fkey"
+            columns: ["community_id"]
+            isOneToOne: false
+            referencedRelation: "communities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      interview_sessions: {
+        Row: {
+          category: string
+          completed: boolean | null
+          completed_at: string | null
+          created_at: string | null
+          feedback: string | null
+          id: string
+          score: number | null
+          user_id: string
+        }
+        Insert: {
+          category: string
+          completed?: boolean | null
+          completed_at?: string | null
+          created_at?: string | null
+          feedback?: string | null
+          id?: string
+          score?: number | null
+          user_id: string
+        }
+        Update: {
+          category?: string
+          completed?: boolean | null
+          completed_at?: string | null
+          created_at?: string | null
+          feedback?: string | null
+          id?: string
+          score?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -30,6 +181,72 @@ export type Database = {
           id?: string
           updated_at?: string | null
           username?: string | null
+        }
+        Relationships: []
+      }
+      projects: {
+        Row: {
+          collaborators: number
+          created_at: string | null
+          deadline: string | null
+          description: string | null
+          id: string
+          progress: number
+          status: string
+          title: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          collaborators?: number
+          created_at?: string | null
+          deadline?: string | null
+          description?: string | null
+          id?: string
+          progress?: number
+          status?: string
+          title: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          collaborators?: number
+          created_at?: string | null
+          deadline?: string | null
+          description?: string | null
+          id?: string
+          progress?: number
+          status?: string
+          title?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      skills: {
+        Row: {
+          id: string
+          improvement: number | null
+          last_updated: string | null
+          name: string
+          score: number
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          improvement?: number | null
+          last_updated?: string | null
+          name: string
+          score?: number
+          user_id: string
+        }
+        Update: {
+          id?: string
+          improvement?: number | null
+          last_updated?: string | null
+          name?: string
+          score?: number
+          user_id?: string
         }
         Relationships: []
       }
