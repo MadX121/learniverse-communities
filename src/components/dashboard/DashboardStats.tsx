@@ -1,6 +1,9 @@
 
+import { useEffect, useState } from "react";
 import { Sparkles, BarChart3, Award, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 interface StatCardProps {
   title: string;
@@ -8,6 +11,13 @@ interface StatCardProps {
   change: number;
   icon: any;
   iconBg: string;
+}
+
+interface DashboardStats {
+  activeProjects: number;
+  communityActivity: number;
+  interviewsCompleted: number;
+  upcomingDeadlines: number;
 }
 
 const StatCard = ({ title, value, change, icon: Icon, iconBg }: StatCardProps) => {
@@ -21,7 +31,7 @@ const StatCard = ({ title, value, change, icon: Icon, iconBg }: StatCardProps) =
         <div className="text-2xl font-semibold">{value}</div>
         <div className={cn(
           "text-xs flex items-center mt-1",
-          change > 0 ? "text-green-500" : "text-red-500"
+          change > 0 ? "text-green-500" : change < 0 ? "text-red-500" : "text-muted-foreground"
         )}>
           {change > 0 ? "+" : ""}{change}% from last week
         </div>
@@ -31,40 +41,147 @@ const StatCard = ({ title, value, change, icon: Icon, iconBg }: StatCardProps) =
 };
 
 const DashboardStats = () => {
-  const stats = [
+  const { user } = useAuth();
+  const [stats, setStats] = useState<DashboardStats>({
+    activeProjects: 0,
+    communityActivity: 0,
+    interviewsCompleted: 0,
+    upcomingDeadlines: 0
+  });
+  const [loading, setLoading] = useState(true);
+  const [growth, setGrowth] = useState({
+    activeProjects: 0,
+    communityActivity: 0,
+    interviewsCompleted: 0,
+    upcomingDeadlines: 0
+  });
+
+  useEffect(() => {
+    if (user) {
+      fetchStats();
+    }
+  }, [user]);
+
+  const fetchStats = async () => {
+    try {
+      setLoading(true);
+      
+      // Count active projects
+      const { count: activeProjectsCount, error: projectsError } = await supabase
+        .from("projects")
+        .select("*", { count: 'exact', head: true })
+        .eq("user_id", user?.id)
+        .in("status", ["in-progress", "planned"]);
+      
+      if (projectsError) throw projectsError;
+      
+      // Count community memberships
+      const { count: communitiesCount, error: communitiesError } = await supabase
+        .from("community_members")
+        .select("*", { count: 'exact', head: true })
+        .eq("user_id", user?.id);
+      
+      if (communitiesError) throw communitiesError;
+      
+      // Count completed interviews
+      const { count: interviewsCount, error: interviewsError } = await supabase
+        .from("interview_sessions")
+        .select("*", { count: 'exact', head: true })
+        .eq("user_id", user?.id)
+        .eq("completed", true);
+      
+      if (interviewsError) throw interviewsError;
+      
+      // Count upcoming deadlines
+      const oneWeekFromNow = new Date();
+      oneWeekFromNow.setDate(oneWeekFromNow.getDate() + 7);
+      
+      const { count: deadlinesCount, error: deadlinesError } = await supabase
+        .from("projects")
+        .select("*", { count: 'exact', head: true })
+        .eq("user_id", user?.id)
+        .lt("deadline", oneWeekFromNow.toISOString())
+        .gt("deadline", new Date().toISOString());
+      
+      if (deadlinesError) throw deadlinesError;
+      
+      // Calculate random growth percentages for demonstration
+      // In a real app, you would compare to historical data
+      const randomGrowth = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+      
+      setStats({
+        activeProjects: activeProjectsCount || 0,
+        communityActivity: communitiesCount || 0,
+        interviewsCompleted: interviewsCount || 0,
+        upcomingDeadlines: deadlinesCount || 0
+      });
+      
+      setGrowth({
+        activeProjects: randomGrowth(0, 15),
+        communityActivity: randomGrowth(5, 20),
+        interviewsCompleted: randomGrowth(-5, 10),
+        upcomingDeadlines: randomGrowth(-10, 5)
+      });
+    } catch (error) {
+      console.error("Error fetching dashboard stats:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const statsArray = [
     { 
       title: "Active Projects", 
-      value: 12, 
-      change: 8, 
+      value: stats.activeProjects, 
+      change: growth.activeProjects, 
       icon: Sparkles, 
       iconBg: "bg-gradient-to-br from-blue-500 to-cyan-500" 
     },
     { 
       title: "Community Activity", 
-      value: 486, 
-      change: 12, 
+      value: stats.communityActivity, 
+      change: growth.communityActivity, 
       icon: BarChart3, 
       iconBg: "bg-gradient-to-br from-purple-500 to-pink-500" 
     },
     { 
       title: "Interviews Completed", 
-      value: 7, 
-      change: 4, 
+      value: stats.interviewsCompleted, 
+      change: growth.interviewsCompleted, 
       icon: Award, 
       iconBg: "bg-gradient-to-br from-amber-500 to-orange-500" 
     },
     { 
       title: "Upcoming Deadlines", 
-      value: 3, 
-      change: -2, 
+      value: stats.upcomingDeadlines, 
+      change: growth.upcomingDeadlines, 
       icon: Calendar, 
       iconBg: "bg-gradient-to-br from-green-500 to-emerald-500" 
     }
   ];
 
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {Array(4).fill(0).map((_, i) => (
+          <div key={i} className="glass rounded-xl p-4 animate-pulse">
+            <div className="flex items-center">
+              <div className="bg-white/10 w-12 h-12 rounded-xl mr-4"></div>
+              <div className="space-y-2 flex-1">
+                <div className="bg-white/10 h-4 w-20 rounded"></div>
+                <div className="bg-white/10 h-6 w-16 rounded"></div>
+                <div className="bg-white/10 h-3 w-24 rounded"></div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      {stats.map((stat, index) => (
+      {statsArray.map((stat, index) => (
         <StatCard key={index} {...stat} />
       ))}
     </div>

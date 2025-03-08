@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { 
   ArrowUpRight, 
@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 interface Project {
   id: string;
@@ -17,49 +19,40 @@ interface Project {
   description: string;
   status: "in-progress" | "completed" | "planned" | "delayed";
   progress: number;
-  deadline: string;
+  deadline: string | null;
   collaborators: number;
 }
 
 const ProjectsOverview = () => {
-  const [projects, setProjects] = useState<Project[]>([
-    {
-      id: "1",
-      title: "AI Research Paper",
-      description: "Analyzing the impact of GPT models on education",
-      status: "in-progress",
-      progress: 65,
-      deadline: "May 15",
-      collaborators: 3
-    },
-    {
-      id: "2",
-      title: "Personal Portfolio",
-      description: "Showcasing my web development skills",
-      status: "delayed",
-      progress: 40,
-      deadline: "Apr 30",
-      collaborators: 1
-    },
-    {
-      id: "3",
-      title: "Mobile App Wireframes",
-      description: "Design concepts for the new health tracking app",
-      status: "completed",
-      progress: 100,
-      deadline: "Apr 10",
-      collaborators: 2
-    },
-    {
-      id: "4",
-      title: "Database Schema",
-      description: "Planning the structure for our new product",
-      status: "planned",
-      progress: 0,
-      deadline: "May 24",
-      collaborators: 4
+  const { user } = useAuth();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (user) {
+      fetchProjects();
     }
-  ]);
+  }, [user]);
+
+  const fetchProjects = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("projects")
+        .select("*")
+        .eq("user_id", user?.id)
+        .order("updated_at", { ascending: false })
+        .limit(4);
+      
+      if (error) throw error;
+      
+      setProjects(data || []);
+    } catch (error) {
+      console.error("Error fetching projects:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getStatusIcon = (status: Project["status"]) => {
     switch (status) {
@@ -104,41 +97,67 @@ const ProjectsOverview = () => {
       </div>
       
       <div className="space-y-3 overflow-y-auto hide-scrollbar max-h-[350px]">
-        {projects.map((project) => (
-          <Link to={`/projects/${project.id}`} key={project.id}>
-            <div className="bg-white/5 hover:bg-white/10 transition-colors p-3 rounded-lg">
-              <div className="flex justify-between mb-2">
-                <h4 className="font-semibold text-sm line-clamp-1">{project.title}</h4>
-                <div className="flex items-center gap-1">
-                  {getStatusIcon(project.status)}
-                  <span className="text-xs">{getStatusText(project.status)}</span>
+        {loading ? (
+          Array(3).fill(0).map((_, index) => (
+            <div key={index} className="animate-pulse">
+              <div className="bg-white/5 p-3 rounded-lg">
+                <div className="bg-white/10 h-4 w-3/4 rounded mb-2"></div>
+                <div className="bg-white/10 h-3 w-full rounded mb-3"></div>
+                <div className="bg-white/10 h-2 w-full rounded mb-2"></div>
+                <div className="flex justify-between mt-2">
+                  <div className="bg-white/10 h-3 w-1/4 rounded"></div>
+                  <div className="bg-white/10 h-3 w-1/4 rounded"></div>
                 </div>
-              </div>
-              
-              <p className="text-xs text-muted-foreground mb-3 line-clamp-1">{project.description}</p>
-              
-              <div className="mb-2">
-                <div className="flex justify-between text-xs mb-1">
-                  <span>Progress</span>
-                  <span>{project.progress}%</span>
-                </div>
-                <Progress 
-                  value={project.progress} 
-                  className="h-1.5" 
-                />
-              </div>
-              
-              <div className="flex justify-between items-center text-xs">
-                <Badge variant="outline" className="text-xs font-normal bg-black/20">
-                  Due {project.deadline}
-                </Badge>
-                <span className="text-muted-foreground">
-                  {project.collaborators} collaborator{project.collaborators !== 1 ? 's' : ''}
-                </span>
               </div>
             </div>
-          </Link>
-        ))}
+          ))
+        ) : projects.length === 0 ? (
+          <div className="text-center py-6">
+            <p className="text-muted-foreground text-sm">No projects yet</p>
+            <Link 
+              to="/projects" 
+              className="text-primary hover:underline text-sm mt-2 inline-block"
+            >
+              Create your first project
+            </Link>
+          </div>
+        ) : (
+          projects.map((project) => (
+            <Link to={`/projects/${project.id}`} key={project.id}>
+              <div className="bg-white/5 hover:bg-white/10 transition-colors p-3 rounded-lg">
+                <div className="flex justify-between mb-2">
+                  <h4 className="font-semibold text-sm line-clamp-1">{project.title}</h4>
+                  <div className="flex items-center gap-1">
+                    {getStatusIcon(project.status)}
+                    <span className="text-xs">{getStatusText(project.status)}</span>
+                  </div>
+                </div>
+                
+                <p className="text-xs text-muted-foreground mb-3 line-clamp-1">{project.description}</p>
+                
+                <div className="mb-2">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span>Progress</span>
+                    <span>{project.progress}%</span>
+                  </div>
+                  <Progress 
+                    value={project.progress} 
+                    className="h-1.5" 
+                  />
+                </div>
+                
+                <div className="flex justify-between items-center text-xs">
+                  <Badge variant="outline" className="text-xs font-normal bg-black/20">
+                    Due {project.deadline ? new Date(project.deadline).toLocaleDateString() : 'TBD'}
+                  </Badge>
+                  <span className="text-muted-foreground">
+                    {project.collaborators} collaborator{project.collaborators !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              </div>
+            </Link>
+          ))
+        )}
       </div>
     </div>
   );
