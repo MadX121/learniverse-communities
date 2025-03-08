@@ -23,6 +23,11 @@ interface Project {
   collaborators: number;
 }
 
+// Type guard function to validate status values
+const isValidStatus = (status: string): status is Project["status"] => {
+  return ["in-progress", "completed", "planned", "delayed"].includes(status);
+};
+
 const ProjectsOverview = () => {
   const { user } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -47,10 +52,18 @@ const ProjectsOverview = () => {
       if (error) throw error;
       
       // Convert status from string to our union type
-      const typedProjects = (data || []).map(project => ({
-        ...project,
-        status: project.status as "in-progress" | "completed" | "planned" | "delayed"
-      }));
+      const typedProjects = (data || []).map(project => {
+        let status = project.status;
+        // Ensure the status is valid, otherwise default to "planned"
+        if (!isValidStatus(status)) {
+          status = "planned";
+        }
+        
+        return {
+          ...project,
+          status: status
+        };
+      });
       
       setProjects(typedProjects);
     } catch (error) {

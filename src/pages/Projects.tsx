@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { Plus, Calendar, X, Clock, CheckCircle2, Search } from "lucide-react";
@@ -23,6 +24,32 @@ interface Project {
   collaborators: number;
   created_at: string;
 }
+
+// Type guard function to validate status values
+const isValidStatus = (status: string): status is Project["status"] => {
+  return ["in-progress", "completed", "planned", "delayed"].includes(status);
+};
+
+// Function to convert Supabase data to Project type
+const convertToProject = (data: any): Project => {
+  let status = data.status;
+  
+  // Ensure the status is valid, otherwise default to "planned"
+  if (!isValidStatus(status)) {
+    status = "planned";
+  }
+  
+  return {
+    id: data.id,
+    title: data.title,
+    description: data.description || "",
+    status: status,
+    progress: data.progress || 0,
+    deadline: data.deadline,
+    collaborators: data.collaborators || 1,
+    created_at: data.created_at
+  };
+};
 
 const Projects = () => {
   const { user, loading } = useAuth();
@@ -69,8 +96,11 @@ const Projects = () => {
       
       if (error) throw error;
       
-      setProjects(data || []);
-      setFilteredProjects(data || []);
+      // Convert the data to the Project type with proper status validation
+      const typedProjects = (data || []).map(convertToProject);
+      
+      setProjects(typedProjects);
+      setFilteredProjects(typedProjects);
     } catch (error) {
       console.error("Error fetching projects:", error);
       toast({
@@ -113,7 +143,10 @@ const Projects = () => {
         description: "Your new project has been created successfully"
       });
       
-      setProjects([...(data || []), ...projects]);
+      // Convert the newly created project data to the Project type
+      const newProjects = (data || []).map(convertToProject);
+      setProjects([...newProjects, ...projects]);
+      
       resetNewProjectForm();
       setIsDialogOpen(false);
     } catch (error) {

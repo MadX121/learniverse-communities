@@ -15,6 +15,11 @@ interface Activity {
   read: boolean;
 }
 
+// Type guard function to validate activity types
+const isValidActivityType = (type: string): type is Activity["type"] => {
+  return ["community", "project", "interview", "system"].includes(type);
+};
+
 const ActivityFeed = () => {
   const { user } = useAuth();
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -39,10 +44,19 @@ const ActivityFeed = () => {
       if (error) throw error;
       
       // Convert type from string to our union type
-      const typedActivities = (data || []).map(activity => ({
-        ...activity,
-        type: activity.type as "community" | "project" | "interview" | "system"
-      }));
+      const typedActivities = (data || []).map(activity => {
+        let type = activity.type;
+        // Ensure the type is valid, otherwise default to "system"
+        if (!isValidActivityType(type)) {
+          type = "system";
+        }
+        
+        return {
+          ...activity,
+          type: type,
+          read: activity.read || false, // Ensure read is always a boolean
+        };
+      });
       
       setActivities(typedActivities);
     } catch (error) {
