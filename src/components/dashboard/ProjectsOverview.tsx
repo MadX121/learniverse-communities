@@ -42,6 +42,8 @@ const ProjectsOverview = () => {
   const fetchProjects = async () => {
     try {
       setLoading(true);
+      // We only fetch projects for this user, even though policies allow seeing all projects
+      // This is for the dashboard view specifically
       const { data, error } = await supabase
         .from("projects")
         .select("*")

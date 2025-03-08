@@ -33,7 +33,7 @@ const CommunitiesOverview = () => {
       // Get all community IDs the user is a member of
       const { data: memberData, error: memberError } = await supabase
         .from('community_members')
-        .select('community_id')
+        .select('community_id, is_creator')
         .eq('user_id', user?.id);
       
       if (memberError) throw memberError;
