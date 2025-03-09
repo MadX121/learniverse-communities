@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { Plus, Calendar, X, Clock, CheckCircle2, Search, Users, ArrowRightLeft } from "lucide-react";
@@ -306,17 +305,17 @@ const Projects = () => {
         description: "Your request to join this project has been sent"
       });
       
-      // Update local state
-      const updatedMembers = [...projectMembers, {
+      // Update local state - FIX: Create properly typed project member
+      const newMember: ProjectMember = {
         id: Math.random().toString(), // Temporary ID until refresh
         project_id: projectId,
         user_id: user?.id || "",
         is_creator: false,
-        status: "pending",
+        status: "pending", // Now explicitly typed as "pending" from the union type
         joined_at: new Date().toISOString()
-      }];
+      };
       
-      setProjectMembers(updatedMembers);
+      setProjectMembers([...projectMembers, newMember]);
       
       // Update the projects array to reflect the pending status
       setProjects(projects.map(project => 
