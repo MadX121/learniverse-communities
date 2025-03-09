@@ -1,6 +1,7 @@
+
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { Plus, Calendar, X, Clock, CheckCircle2, Search, Users, ArrowRightLeft } from "lucide-react";
+import { Plus, Calendar, X, Clock, CheckCircle2, Search, Users, ArrowRightLeft, UserPlus, Check, Ban } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,6 +13,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface Project {
   id: string;
@@ -34,6 +36,17 @@ interface ProjectMember {
   status: "pending" | "accepted" | "rejected";
   joined_at: string;
   created_at?: string;
+  user_details?: {
+    username?: string;
+    full_name?: string;
+    avatar_url?: string;
+  };
+}
+
+interface PendingRequestProject {
+  id: string;
+  title: string;
+  pendingRequests: ProjectMember[];
 }
 
 // Type guard function to validate status values
@@ -84,6 +97,7 @@ const Projects = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
   const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
+  const [pendingRequestProjects, setPendingRequestProjects] = useState<PendingRequestProject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -157,6 +171,9 @@ const Projects = () => {
       
       setProjects(typedProjects);
       setFilteredProjects(typedProjects);
+      
+      // Fetch pending requests for projects where user is creator
+      fetchPendingRequests();
     } catch (error) {
       console.error("Error fetching projects:", error);
       toast({
@@ -166,6 +183,94 @@ const Projects = () => {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchPendingRequests = async () => {
+    try {
+      // Get projects where current user is creator
+      const { data: creatorMemberships, error: creatorError } = await supabase
+        .from("project_members")
+        .select("project_id")
+        .eq("user_id", user?.id)
+        .eq("is_creator", true);
+      
+      if (creatorError) throw creatorError;
+      
+      if (!creatorMemberships || creatorMemberships.length === 0) {
+        setPendingRequestProjects([]);
+        return;
+      }
+      
+      const projectIds = creatorMemberships.map(membership => membership.project_id);
+      
+      // Get all pending requests for those projects
+      const { data: pendingMembers, error: pendingError } = await supabase
+        .from("project_members")
+        .select(`
+          id,
+          project_id,
+          user_id,
+          is_creator,
+          status,
+          joined_at,
+          created_at,
+          profiles:user_id(username, full_name, avatar_url)
+        `)
+        .in("project_id", projectIds)
+        .eq("status", "pending")
+        .neq("user_id", user?.id);
+      
+      if (pendingError) throw pendingError;
+      
+      if (!pendingMembers || pendingMembers.length === 0) {
+        setPendingRequestProjects([]);
+        return;
+      }
+      
+      // Get project details for the projects with pending requests
+      const { data: projectsData, error: projectsError } = await supabase
+        .from("projects")
+        .select("id, title")
+        .in("id", [...new Set(pendingMembers.map(member => member.project_id))]);
+      
+      if (projectsError) throw projectsError;
+      
+      if (!projectsData) {
+        setPendingRequestProjects([]);
+        return;
+      }
+      
+      // Format the members with user details
+      const formattedMembers: ProjectMember[] = pendingMembers.map(member => {
+        return {
+          id: member.id,
+          project_id: member.project_id,
+          user_id: member.user_id,
+          is_creator: !!member.is_creator,
+          status: isValidMemberStatus(member.status) ? member.status : "pending",
+          joined_at: member.joined_at,
+          created_at: member.created_at,
+          user_details: {
+            username: member.profiles?.username || "Unknown User",
+            full_name: member.profiles?.full_name || "",
+            avatar_url: member.profiles?.avatar_url || ""
+          }
+        };
+      });
+      
+      // Group pending requests by project
+      const pendingRequestsByProject: PendingRequestProject[] = projectsData.map(project => {
+        return {
+          id: project.id,
+          title: project.title,
+          pendingRequests: formattedMembers.filter(member => member.project_id === project.id)
+        };
+      }).filter(project => project.pendingRequests.length > 0);
+      
+      setPendingRequestProjects(pendingRequestsByProject);
+    } catch (error) {
+      console.error("Error fetching pending requests:", error);
     }
   };
 
@@ -333,6 +438,53 @@ const Projects = () => {
     }
   };
 
+  const respondToJoinRequest = async (memberId: string, projectId: string, approved: boolean) => {
+    try {
+      const newStatus = approved ? "accepted" : "rejected";
+      
+      const { error } = await supabase
+        .from("project_members")
+        .update({ 
+          status: newStatus,
+          joined_at: approved ? new Date().toISOString() : null
+        })
+        .eq("id", memberId);
+      
+      if (error) throw error;
+      
+      // Update project collaborator count if approved
+      if (approved) {
+        const project = projects.find(p => p.id === projectId);
+        if (project) {
+          const { error: projectError } = await supabase
+            .from("projects")
+            .update({ 
+              collaborators: project.collaborators + 1,
+              updated_at: new Date().toISOString()
+            })
+            .eq("id", projectId);
+          
+          if (projectError) throw projectError;
+        }
+      }
+      
+      toast({
+        title: approved ? "Request approved" : "Request declined",
+        description: approved ? "User has been added to the project" : "User request has been declined"
+      });
+      
+      // Refresh project data and pending requests
+      fetchProjects();
+    } catch (error) {
+      console.error("Error responding to join request:", error);
+      toast({
+        title: "Error processing request",
+        description: "Please try again later",
+        variant: "destructive"
+      });
+    }
+  };
+
   const filterProjects = (filter: string, search: string) => {
     let filtered = [...projects];
     
@@ -421,6 +573,57 @@ const Projects = () => {
             </Button>
           </div>
         </div>
+
+        {/* Pending Join Requests Section */}
+        {pendingRequestProjects.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-xl font-semibold mb-4">Pending Join Requests</h2>
+            <div className="space-y-4">
+              {pendingRequestProjects.map((project) => (
+                <Card key={project.id} className="bg-white/5">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg">{project.title}</CardTitle>
+                    <CardDescription>
+                      {project.pendingRequests.length} {project.pendingRequests.length === 1 ? 'person' : 'people'} requesting to join
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pb-2">
+                    <div className="divide-y divide-gray-800">
+                      {project.pendingRequests.map((request) => (
+                        <div key={request.id} className="py-3 flex justify-between items-center">
+                          <div>
+                            <p className="font-medium">{request.user_details?.full_name || request.user_details?.username || "Unknown User"}</p>
+                            <p className="text-sm text-muted-foreground">Requested {new Date(request.created_at || request.joined_at).toLocaleDateString()}</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              className="flex items-center gap-1"
+                              onClick={() => respondToJoinRequest(request.id, request.project_id, true)}
+                            >
+                              <Check className="h-4 w-4" />
+                              Approve
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              className="text-red-500 flex items-center gap-1"
+                              onClick={() => respondToJoinRequest(request.id, request.project_id, false)}
+                            >
+                              <X className="h-4 w-4" />
+                              Decline
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="bg-secondary/30 rounded-xl p-6">
           <div className="flex flex-col sm:flex-row justify-between gap-4 mb-6">
@@ -532,7 +735,7 @@ const Projects = () => {
                           size="sm"
                           onClick={() => requestToJoinProject(project.id)}
                         >
-                          <Users className="h-3 w-3 mr-1" />
+                          <UserPlus className="h-3 w-3 mr-1" />
                           Join
                         </Button>
                       )}

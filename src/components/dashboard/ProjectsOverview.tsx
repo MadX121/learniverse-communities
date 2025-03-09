@@ -7,7 +7,8 @@ import {
   CheckCircle2, 
   Circle, 
   AlertCircle,
-  Users
+  Users,
+  UserPlus
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -24,6 +25,7 @@ interface Project {
   collaborators: number;
   isCreator: boolean;
   memberStatus: "pending" | "accepted" | "rejected" | null;
+  pendingRequestsCount?: number;
 }
 
 interface ProjectMember {
@@ -113,13 +115,48 @@ const ProjectsOverview = () => {
           deadline: project.deadline,
           collaborators: project.collaborators || 1,
           isCreator: membership?.is_creator || false,
-          memberStatus: memberStatus
+          memberStatus: memberStatus,
+          pendingRequestsCount: 0
         };
       });
       
-      setProjects(typedProjects);
+      // For creator projects, fetch pending request counts
+      const creatorProjects = typedProjects.filter(project => project.isCreator);
+      
+      if (creatorProjects.length > 0) {
+        const creatorProjectIds = creatorProjects.map(project => project.id);
+        
+        // Get pending request counts for each project
+        const { data: pendingRequests, error: pendingError } = await supabase
+          .from("project_members")
+          .select("project_id, count")
+          .in("project_id", creatorProjectIds)
+          .eq("status", "pending")
+          .neq("user_id", user?.id)
+          .order("project_id")
+          .order("count")
+          .group("project_id");
+        
+        if (!pendingError && pendingRequests) {
+          // Update projects with pending request counts
+          const updatedProjects = typedProjects.map(project => {
+            const pendingCount = pendingRequests.find(p => p.project_id === project.id);
+            return {
+              ...project,
+              pendingRequestsCount: pendingCount ? parseInt(pendingCount.count) : 0
+            };
+          });
+          
+          setProjects(updatedProjects);
+        } else {
+          setProjects(typedProjects);
+        }
+      } else {
+        setProjects(typedProjects);
+      }
     } catch (error) {
       console.error("Error fetching projects:", error);
+      setProjects([]);
     } finally {
       setLoading(false);
     }
@@ -205,7 +242,7 @@ const ProjectsOverview = () => {
           </div>
         ) : (
           projects.map((project) => (
-            <Link to={`/projects/${project.id}`} key={project.id}>
+            <Link to={`/projects`} key={project.id}>
               <div className="bg-white/5 hover:bg-white/10 transition-colors p-3 rounded-lg">
                 <div className="flex justify-between mb-2">
                   <h4 className="font-semibold text-sm line-clamp-1">{project.title}</h4>
@@ -235,10 +272,18 @@ const ProjectsOverview = () => {
                     </Badge>
                     {getMembershipBadge(project)}
                   </div>
-                  <span className="text-muted-foreground flex items-center">
-                    <Users className="h-3 w-3 mr-1" />
-                    {project.collaborators}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {project.pendingRequestsCount && project.pendingRequestsCount > 0 && (
+                      <Badge variant="outline" className="text-xs font-normal bg-yellow-500/10 text-yellow-500 flex items-center gap-1">
+                        <UserPlus className="h-3 w-3" />
+                        {project.pendingRequestsCount}
+                      </Badge>
+                    )}
+                    <span className="text-muted-foreground flex items-center">
+                      <Users className="h-3 w-3 mr-1" />
+                      {project.collaborators}
+                    </span>
+                  </div>
                 </div>
               </div>
             </Link>
