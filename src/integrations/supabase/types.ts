@@ -184,6 +184,44 @@ export type Database = {
         }
         Relationships: []
       }
+      project_members: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_creator: boolean | null
+          joined_at: string | null
+          project_id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_creator?: boolean | null
+          joined_at?: string | null
+          project_id: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_creator?: boolean | null
+          joined_at?: string | null
+          project_id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_members_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       projects: {
         Row: {
           collaborators: number
@@ -191,6 +229,7 @@ export type Database = {
           deadline: string | null
           description: string | null
           id: string
+          is_creator: boolean | null
           progress: number
           status: string
           title: string
@@ -203,6 +242,7 @@ export type Database = {
           deadline?: string | null
           description?: string | null
           id?: string
+          is_creator?: boolean | null
           progress?: number
           status?: string
           title: string
@@ -215,6 +255,7 @@ export type Database = {
           deadline?: string | null
           description?: string | null
           id?: string
+          is_creator?: boolean | null
           progress?: number
           status?: string
           title?: string

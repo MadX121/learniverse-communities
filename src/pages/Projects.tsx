@@ -1,7 +1,7 @@
 
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { Plus, Calendar, X, Clock, CheckCircle2, Search } from "lucide-react";
+import { Plus, Calendar, X, Clock, CheckCircle2, Search, Users, ArrowRightLeft } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -23,6 +23,17 @@ interface Project {
   deadline: string | null;
   collaborators: number;
   created_at: string;
+  isCreator: boolean;
+  memberStatus: "pending" | "accepted" | "rejected" | null;
+}
+
+interface ProjectMember {
+  id: string;
+  project_id: string;
+  user_id: string;
+  is_creator: boolean;
+  status: "pending" | "accepted" | "rejected";
+  joined_at: string;
 }
 
 // Type guard function to validate status values
@@ -31,13 +42,16 @@ const isValidStatus = (status: string): status is Project["status"] => {
 };
 
 // Function to convert Supabase data to Project type
-const convertToProject = (data: any): Project => {
+const convertToProject = (data: any, members: ProjectMember[]): Project => {
   let status = data.status;
   
   // Ensure the status is valid, otherwise default to "planned"
   if (!isValidStatus(status)) {
     status = "planned";
   }
+  
+  // Find if current user is a member and their status
+  const userMember = members.find(member => member.project_id === data.id);
   
   return {
     id: data.id,
@@ -47,7 +61,9 @@ const convertToProject = (data: any): Project => {
     progress: data.progress || 0,
     deadline: data.deadline,
     collaborators: data.collaborators || 1,
-    created_at: data.created_at
+    created_at: data.created_at,
+    isCreator: userMember?.is_creator || false,
+    memberStatus: userMember?.status || null
   };
 };
 
@@ -57,6 +73,7 @@ const Projects = () => {
   const { toast } = useToast();
   
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
   const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -89,6 +106,18 @@ const Projects = () => {
   const fetchProjects = async () => {
     try {
       setIsLoading(true);
+      
+      // Fetch all project membership data for current user
+      const { data: memberData, error: memberError } = await supabase
+        .from("project_members")
+        .select("*")
+        .eq("user_id", user?.id);
+      
+      if (memberError) throw memberError;
+      
+      setProjectMembers(memberData || []);
+      
+      // Fetch all projects
       const { data, error } = await supabase
         .from("projects")
         .select("*")
@@ -97,7 +126,9 @@ const Projects = () => {
       if (error) throw error;
       
       // Convert the data to the Project type with proper status validation
-      const typedProjects = (data || []).map(convertToProject);
+      const typedProjects = (data || []).map(project => 
+        convertToProject(project, memberData || [])
+      );
       
       setProjects(typedProjects);
       setFilteredProjects(typedProjects);
@@ -124,6 +155,7 @@ const Projects = () => {
         return;
       }
 
+      // Start a transaction to create both the project and project membership
       const { data, error } = await supabase
         .from("projects")
         .insert({
@@ -138,14 +170,27 @@ const Projects = () => {
       
       if (error) throw error;
       
+      if (data && data.length > 0) {
+        // Add creator as project member
+        const { error: memberError } = await supabase
+          .from("project_members")
+          .insert({
+            project_id: data[0].id,
+            user_id: user?.id,
+            is_creator: true,
+            status: "accepted"
+          });
+        
+        if (memberError) throw memberError;
+      }
+      
       toast({
         title: "Project created",
         description: "Your new project has been created successfully"
       });
       
-      // Convert the newly created project data to the Project type
-      const newProjects = (data || []).map(convertToProject);
-      setProjects([...newProjects, ...projects]);
+      // Refresh project data
+      fetchProjects();
       
       resetNewProjectForm();
       setIsDialogOpen(false);
@@ -217,6 +262,40 @@ const Projects = () => {
     }
   };
 
+  const requestToJoinProject = async (projectId: string) => {
+    try {
+      const { error } = await supabase
+        .from("project_members")
+        .insert({
+          project_id: projectId,
+          user_id: user?.id,
+          is_creator: false,
+          status: "pending"
+        });
+      
+      if (error) throw error;
+      
+      toast({
+        title: "Request sent",
+        description: "Your request to join this project has been sent"
+      });
+      
+      // Update local state
+      setProjects(projects.map(project => 
+        project.id === projectId 
+          ? { ...project, memberStatus: "pending" } 
+          : project
+      ));
+    } catch (error) {
+      console.error("Error requesting to join project:", error);
+      toast({
+        title: "Error sending request",
+        description: "Please try again later",
+        variant: "destructive"
+      });
+    }
+  };
+
   const filterProjects = (filter: string, search: string) => {
     let filtered = [...projects];
     
@@ -260,19 +339,17 @@ const Projects = () => {
     }
   };
 
-  const getStatusIcon = (status: Project["status"]) => {
-    switch (status) {
-      case "in-progress":
-        return <Clock className="h-4 w-4 text-blue-500" />;
-      case "completed":
-        return <CheckCircle2 className="h-4 w-4 text-green-500" />;
-      case "planned":
-        return <Calendar className="h-4 w-4 text-orange-500" />;
-      case "delayed":
-        return <X className="h-4 w-4 text-red-500" />;
-      default:
-        return null;
+  const getMembershipBadge = (project: Project) => {
+    if (project.isCreator) {
+      return <Badge variant="outline" className="bg-purple-500/10 text-purple-500">Creator</Badge>;
+    } else if (project.memberStatus === "accepted") {
+      return <Badge variant="outline" className="bg-green-500/10 text-green-500">Member</Badge>;
+    } else if (project.memberStatus === "pending") {
+      return <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500">Pending</Badge>;
+    } else if (project.memberStatus === "rejected") {
+      return <Badge variant="outline" className="bg-red-500/10 text-red-500">Rejected</Badge>;
     }
+    return null;
   };
 
   if (loading) {
@@ -362,8 +439,9 @@ const Projects = () => {
                 <div key={project.id} className="bg-white/5 hover:bg-white/10 transition-colors p-5 rounded-lg">
                   <div className="flex justify-between items-start mb-2">
                     <h3 className="font-semibold text-lg">{project.title}</h3>
-                    <div className="flex items-center gap-1">
+                    <div className="flex flex-col items-end gap-1">
                       {getStatusBadge(project.status)}
+                      {getMembershipBadge(project)}
                     </div>
                   </div>
                   
@@ -393,7 +471,7 @@ const Projects = () => {
                   
                   <div className="mt-4 pt-4 border-t border-white/10 flex justify-between">
                     <div className="flex gap-2">
-                      {project.status !== "completed" && (
+                      {project.isCreator && project.status !== "completed" && (
                         <Button 
                           variant="ghost" 
                           size="sm"
@@ -402,7 +480,7 @@ const Projects = () => {
                           Complete
                         </Button>
                       )}
-                      {project.status === "planned" && (
+                      {project.isCreator && project.status === "planned" && (
                         <Button 
                           variant="ghost" 
                           size="sm"
@@ -411,14 +489,26 @@ const Projects = () => {
                           Start
                         </Button>
                       )}
+                      {!project.memberStatus && !project.isCreator && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => requestToJoinProject(project.id)}
+                        >
+                          <Users className="h-3 w-3 mr-1" />
+                          Join
+                        </Button>
+                      )}
                     </div>
-                    <Button 
-                      variant="destructive" 
-                      size="sm"
-                      onClick={() => deleteProject(project.id)}
-                    >
-                      Delete
-                    </Button>
+                    {project.isCreator && (
+                      <Button 
+                        variant="destructive" 
+                        size="sm"
+                        onClick={() => deleteProject(project.id)}
+                      >
+                        Delete
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}

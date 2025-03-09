@@ -6,7 +6,8 @@ import {
   Clock, 
   CheckCircle2, 
   Circle, 
-  AlertCircle 
+  AlertCircle,
+  Users
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -21,6 +22,17 @@ interface Project {
   progress: number;
   deadline: string | null;
   collaborators: number;
+  isCreator: boolean;
+  memberStatus: "pending" | "accepted" | "rejected" | null;
+}
+
+interface ProjectMember {
+  id: string;
+  project_id: string;
+  user_id: string;
+  is_creator: boolean;
+  status: "pending" | "accepted" | "rejected";
+  joined_at: string;
 }
 
 // Type guard function to validate status values
@@ -42,18 +54,36 @@ const ProjectsOverview = () => {
   const fetchProjects = async () => {
     try {
       setLoading(true);
-      // We only fetch projects for this user, even though policies allow seeing all projects
-      // This is for the dashboard view specifically
+      
+      // Fetch user's project memberships
+      const { data: memberData, error: memberError } = await supabase
+        .from("project_members")
+        .select("*")
+        .eq("user_id", user?.id)
+        .in("status", ["accepted", "pending"]);
+      
+      if (memberError) throw memberError;
+      
+      if (!memberData || memberData.length === 0) {
+        setProjects([]);
+        setLoading(false);
+        return;
+      }
+      
+      // Get project IDs where user is a member
+      const projectIds = memberData.map(member => member.project_id);
+      
+      // Fetch projects where user is a member
       const { data, error } = await supabase
         .from("projects")
         .select("*")
-        .eq("user_id", user?.id)
+        .in("id", projectIds)
         .order("updated_at", { ascending: false })
         .limit(4);
       
       if (error) throw error;
       
-      // Convert status from string to our union type
+      // Convert status from string to our union type and add membership info
       const typedProjects = (data || []).map(project => {
         let status = project.status;
         // Ensure the status is valid, otherwise default to "planned"
@@ -61,9 +91,19 @@ const ProjectsOverview = () => {
           status = "planned";
         }
         
+        // Find user's membership for this project
+        const membership = memberData.find(m => m.project_id === project.id);
+        
         return {
-          ...project,
-          status: status
+          id: project.id,
+          title: project.title,
+          description: project.description || "",
+          status: status,
+          progress: project.progress || 0,
+          deadline: project.deadline,
+          collaborators: project.collaborators || 1,
+          isCreator: membership?.is_creator || false,
+          memberStatus: membership?.status || null
         };
       });
       
@@ -103,6 +143,17 @@ const ProjectsOverview = () => {
       default:
         return status;
     }
+  };
+
+  const getMembershipBadge = (project: Project) => {
+    if (project.isCreator) {
+      return <Badge variant="outline" className="text-xs font-normal bg-purple-500/10 text-purple-500">Creator</Badge>;
+    } else if (project.memberStatus === "accepted") {
+      return <Badge variant="outline" className="text-xs font-normal bg-green-500/10 text-green-500">Member</Badge>;
+    } else if (project.memberStatus === "pending") {
+      return <Badge variant="outline" className="text-xs font-normal bg-yellow-500/10 text-yellow-500">Pending</Badge>;
+    }
+    return null;
   };
 
   return (
@@ -168,11 +219,15 @@ const ProjectsOverview = () => {
                 </div>
                 
                 <div className="flex justify-between items-center text-xs">
-                  <Badge variant="outline" className="text-xs font-normal bg-black/20">
-                    Due {project.deadline ? new Date(project.deadline).toLocaleDateString() : 'TBD'}
-                  </Badge>
-                  <span className="text-muted-foreground">
-                    {project.collaborators} collaborator{project.collaborators !== 1 ? 's' : ''}
+                  <div className="flex items-center gap-1">
+                    <Badge variant="outline" className="text-xs font-normal bg-black/20">
+                      Due {project.deadline ? new Date(project.deadline).toLocaleDateString() : 'TBD'}
+                    </Badge>
+                    {getMembershipBadge(project)}
+                  </div>
+                  <span className="text-muted-foreground flex items-center">
+                    <Users className="h-3 w-3 mr-1" />
+                    {project.collaborators}
                   </span>
                 </div>
               </div>
