@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
 interface Project {
@@ -92,7 +92,7 @@ const Projects = () => {
   const [newProject, setNewProject] = useState({
     title: "",
     description: "",
-    status: "planned" as const,
+    status: "planned" as Project["status"],
     deadline: "",
     collaborators: 1
   });
@@ -203,7 +203,7 @@ const Projects = () => {
             project_id: data[0].id,
             user_id: user?.id,
             is_creator: true,
-            status: "accepted"
+            status: "accepted" as const
           });
         
         if (memberError) throw memberError;
@@ -295,7 +295,7 @@ const Projects = () => {
           project_id: projectId,
           user_id: user?.id,
           is_creator: false,
-          status: "pending"
+          status: "pending" as const
         });
       
       if (error) throw error;
@@ -587,7 +587,6 @@ const Projects = () => {
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm"
                 value={newProject.status}
                 onChange={(e) => {
-                  // Fix TypeScript error by ensuring the type is restricted to valid status values
                   const value = e.target.value;
                   if (isValidStatus(value)) {
                     setNewProject({
