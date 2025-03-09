@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { Users, Sparkles, MessageSquare, ChevronRight } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -33,7 +32,7 @@ const CommunitiesOverview = () => {
       // Get all community IDs the user is a member of
       const { data: memberData, error: memberError } = await supabase
         .from('community_members')
-        .select('community_id, is_creator')
+        .select('community_id')
         .eq('user_id', user?.id);
       
       if (memberError) throw memberError;

@@ -34,6 +34,7 @@ interface ProjectMember {
   is_creator: boolean;
   status: "pending" | "accepted" | "rejected";
   joined_at: string;
+  created_at?: string;
 }
 
 // Type guard function to validate status values
@@ -41,17 +42,26 @@ const isValidStatus = (status: string): status is Project["status"] => {
   return ["in-progress", "completed", "planned", "delayed"].includes(status);
 };
 
+// Type guard function to validate member status values
+const isValidMemberStatus = (status: string): status is ProjectMember["status"] => {
+  return ["pending", "accepted", "rejected"].includes(status);
+};
+
 // Function to convert Supabase data to Project type
 const convertToProject = (data: any, members: ProjectMember[]): Project => {
-  let status = data.status;
-  
   // Ensure the status is valid, otherwise default to "planned"
-  if (!isValidStatus(status)) {
-    status = "planned";
-  }
+  const status = isValidStatus(data.status) ? data.status : "planned";
   
   // Find if current user is a member and their status
   const userMember = members.find(member => member.project_id === data.id);
+  
+  // Validate member status
+  let memberStatus: Project["memberStatus"] = null;
+  if (userMember?.status) {
+    memberStatus = isValidMemberStatus(userMember.status) 
+      ? userMember.status 
+      : "pending";
+  }
   
   return {
     id: data.id,
@@ -63,7 +73,7 @@ const convertToProject = (data: any, members: ProjectMember[]): Project => {
     collaborators: data.collaborators || 1,
     created_at: data.created_at,
     isCreator: userMember?.is_creator || false,
-    memberStatus: userMember?.status || null
+    memberStatus: memberStatus
   };
 };
 
@@ -115,7 +125,23 @@ const Projects = () => {
       
       if (memberError) throw memberError;
       
-      setProjectMembers(memberData || []);
+      // Type-safe project members
+      const typedMembers: ProjectMember[] = (memberData || []).map(member => {
+        // Validate member status
+        const status = isValidMemberStatus(member.status) ? member.status : "pending";
+        
+        return {
+          id: member.id,
+          project_id: member.project_id,
+          user_id: member.user_id,
+          is_creator: member.is_creator || false,
+          status: status,
+          joined_at: member.joined_at || new Date().toISOString(),
+          created_at: member.created_at
+        };
+      });
+      
+      setProjectMembers(typedMembers);
       
       // Fetch all projects
       const { data, error } = await supabase
@@ -127,7 +153,7 @@ const Projects = () => {
       
       // Convert the data to the Project type with proper status validation
       const typedProjects = (data || []).map(project => 
-        convertToProject(project, memberData || [])
+        convertToProject(project, typedMembers)
       );
       
       setProjects(typedProjects);

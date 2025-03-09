@@ -52,10 +52,13 @@ const ActivityFeed = () => {
         }
         
         return {
-          ...activity,
+          id: activity.id,
           type: type,
+          title: activity.title,
+          description: activity.description || "",
+          created_at: activity.created_at || new Date().toISOString(),
           read: activity.read || false, // Ensure read is always a boolean
-        };
+        } as Activity;
       });
       
       setActivities(typedActivities);

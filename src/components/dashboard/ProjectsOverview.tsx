@@ -40,6 +40,11 @@ const isValidStatus = (status: string): status is Project["status"] => {
   return ["in-progress", "completed", "planned", "delayed"].includes(status);
 };
 
+// Type guard function to validate member status values
+const isValidMemberStatus = (status: string): status is ProjectMember["status"] => {
+  return ["pending", "accepted", "rejected"].includes(status);
+};
+
 const ProjectsOverview = () => {
   const { user } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -84,15 +89,20 @@ const ProjectsOverview = () => {
       if (error) throw error;
       
       // Convert status from string to our union type and add membership info
-      const typedProjects = (data || []).map(project => {
-        let status = project.status;
+      const typedProjects: Project[] = (data || []).map(project => {
         // Ensure the status is valid, otherwise default to "planned"
-        if (!isValidStatus(status)) {
-          status = "planned";
-        }
+        const status = isValidStatus(project.status) ? project.status : "planned";
         
         // Find user's membership for this project
         const membership = memberData.find(m => m.project_id === project.id);
+        
+        // Validate member status
+        let memberStatus: Project["memberStatus"] = null;
+        if (membership?.status) {
+          memberStatus = isValidMemberStatus(membership.status) 
+            ? membership.status 
+            : "pending";
+        }
         
         return {
           id: project.id,
@@ -103,7 +113,7 @@ const ProjectsOverview = () => {
           deadline: project.deadline,
           collaborators: project.collaborators || 1,
           isCreator: membership?.is_creator || false,
-          memberStatus: membership?.status || null
+          memberStatus: memberStatus
         };
       });
       
