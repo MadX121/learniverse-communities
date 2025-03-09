@@ -143,7 +143,7 @@ const Projects = () => {
       
       setProjectMembers(typedMembers);
       
-      // Fetch all projects
+      // Fetch ALL projects (not just user's projects) to make them visible to everyone
       const { data, error } = await supabase
         .from("projects")
         .select("*")
@@ -181,7 +181,7 @@ const Projects = () => {
         return;
       }
 
-      // Start a transaction to create both the project and project membership
+      // Create the project
       const { data, error } = await supabase
         .from("projects")
         .insert({
@@ -307,6 +307,18 @@ const Projects = () => {
       });
       
       // Update local state
+      const updatedMembers = [...projectMembers, {
+        id: Math.random().toString(), // Temporary ID until refresh
+        project_id: projectId,
+        user_id: user?.id || "",
+        is_creator: false,
+        status: "pending",
+        joined_at: new Date().toISOString()
+      }];
+      
+      setProjectMembers(updatedMembers);
+      
+      // Update the projects array to reflect the pending status
       setProjects(projects.map(project => 
         project.id === projectId 
           ? { ...project, memberStatus: "pending" } 
@@ -575,10 +587,16 @@ const Projects = () => {
                 id="status"
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm"
                 value={newProject.status}
-                onChange={(e) => setNewProject({
-                  ...newProject, 
-                  status: e.target.value as "planned" | "in-progress" | "completed" | "delayed"
-                })}
+                onChange={(e) => {
+                  // Fix TypeScript error by ensuring the type is restricted to valid status values
+                  const value = e.target.value;
+                  if (isValidStatus(value)) {
+                    setNewProject({
+                      ...newProject, 
+                      status: value
+                    });
+                  }
+                }}
               >
                 <option value="planned">Planned</option>
                 <option value="in-progress">In Progress</option>
