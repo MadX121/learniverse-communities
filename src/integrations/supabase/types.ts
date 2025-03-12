@@ -246,6 +246,7 @@ export type Database = {
           is_creator: boolean | null
           progress: number
           status: string
+          technologies: string[] | null
           title: string
           updated_at: string | null
           user_id: string
@@ -259,6 +260,7 @@ export type Database = {
           is_creator?: boolean | null
           progress?: number
           status?: string
+          technologies?: string[] | null
           title: string
           updated_at?: string | null
           user_id: string
@@ -272,6 +274,7 @@ export type Database = {
           is_creator?: boolean | null
           progress?: number
           status?: string
+          technologies?: string[] | null
           title?: string
           updated_at?: string | null
           user_id?: string

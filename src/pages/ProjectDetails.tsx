@@ -1,21 +1,23 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Users, Calendar } from "lucide-react";
+import { ArrowLeft, Users, Calendar, CheckCircle } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { useToast } from "@/components/ui/use-toast";
 
 interface ProjectMember {
   id: string;
   user_id: string;
   status: "pending" | "approved" | "rejected";
   is_creator: boolean;
-  profile: {
+  profiles: {
     username: string | null;
     full_name: string | null;
     avatar_url: string | null;
@@ -32,12 +34,14 @@ interface Project {
   collaborators: number;
   created_at: string;
   user_id: string;
+  technologies: string[];
 }
 
 const ProjectDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { toast } = useToast();
   const [project, setProject] = useState<Project | null>(null);
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,7 +73,7 @@ const ProjectDetails = () => {
           user_id,
           status,
           is_creator,
-          profile:profiles (
+          profiles (
             username,
             full_name,
             avatar_url
@@ -84,6 +88,11 @@ const ProjectDetails = () => {
       setMembers(membersData as ProjectMember[]);
     } catch (error) {
       console.error("Error fetching project details:", error);
+      toast({
+        title: "Error loading project",
+        description: "Could not load project details. Please try again.",
+        variant: "destructive"
+      });
     } finally {
       setLoading(false);
     }
@@ -121,22 +130,24 @@ const ProjectDetails = () => {
         </Button>
 
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">{project.title}</h1>
-          <p className="text-muted-foreground">{project.description}</p>
+          <div className="flex items-center justify-between">
+            <h1 className="text-3xl font-bold">{project.title}</h1>
+            <Badge variant={
+              project.status === "planned" ? "secondary" :
+              project.status === "active" ? "default" :
+              "outline"
+            }>
+              {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
+            </Badge>
+          </div>
+          <p className="text-muted-foreground mt-2">{project.description}</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="md:col-span-2 space-y-6">
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
+              <CardHeader>
                 <h2 className="text-xl font-semibold">Progress</h2>
-                <span className={`px-2 py-1 text-xs rounded-full ${
-                  project.status === "planned" ? "bg-blue-500/20 text-blue-500" :
-                  project.status === "active" ? "bg-green-500/20 text-green-500" :
-                  "bg-purple-500/20 text-purple-500"
-                }`}>
-                  {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
-                </span>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
@@ -151,28 +162,50 @@ const ProjectDetails = () => {
 
             <Card>
               <CardHeader>
+                <h2 className="text-xl font-semibold">Technologies</h2>
+              </CardHeader>
+              <CardContent>
+                {project.technologies && project.technologies.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {project.technologies.map((tech, index) => (
+                      <Badge key={index} variant="secondary">
+                        {tech}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">No technologies specified</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
                 <h2 className="text-xl font-semibold">Team Members</h2>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   {members.map((member) => (
-                    <div key={member.id} className="flex items-center justify-between">
+                    <div key={member.id} className="flex items-center justify-between bg-secondary/30 p-3 rounded-lg">
                       <div className="flex items-center gap-3">
                         <Avatar>
-                          {member.profile?.avatar_url ? (
-                            <AvatarImage src={member.profile.avatar_url} />
+                          {member.profiles?.avatar_url ? (
+                            <AvatarImage src={member.profiles.avatar_url} />
                           ) : (
                             <AvatarFallback>
-                              {member.profile?.username?.[0] || member.profile?.full_name?.[0] || '?'}
+                              {member.profiles?.username?.[0] || member.profiles?.full_name?.[0] || '?'}
                             </AvatarFallback>
                           )}
                         </Avatar>
                         <div>
                           <p className="font-medium">
-                            {member.profile?.username || member.profile?.full_name || 'Anonymous'}
+                            {member.profiles?.username || member.profiles?.full_name || 'Anonymous'}
                           </p>
                           {member.is_creator && (
-                            <span className="text-xs text-muted-foreground">Creator</span>
+                            <div className="flex items-center text-xs text-muted-foreground">
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Project Creator
+                            </div>
                           )}
                         </div>
                       </div>
