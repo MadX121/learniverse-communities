@@ -1,179 +1,138 @@
 
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { Plus, Calendar, X, Clock, CheckCircle2, Search, Users, ArrowRightLeft, UserPlus, Check, Ban } from "lucide-react";
+import { 
+  Plus, 
+  Search, 
+  Filter, 
+  Calendar, 
+  Users, 
+  CheckCircle, 
+  XCircle,
+  Clock,
+  GitMerge
+} from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { useToast } from "@/components/ui/use-toast";
+import { formatDistanceToNow } from "date-fns";
+
+// Define types for the project and its members
+type ProjectStatus = "planned" | "active" | "completed";
 
 interface Project {
   id: string;
   title: string;
-  description: string;
-  status: "in-progress" | "completed" | "planned" | "delayed";
+  description: string | null;
+  status: ProjectStatus;
   progress: number;
+  is_creator: boolean;
   deadline: string | null;
   collaborators: number;
   created_at: string;
-  isCreator: boolean;
-  memberStatus: "pending" | "accepted" | "rejected" | null;
+  user_id: string;
 }
 
 interface ProjectMember {
   id: string;
   project_id: string;
   user_id: string;
+  status: "pending" | "approved" | "rejected";
   is_creator: boolean;
-  status: "pending" | "accepted" | "rejected";
-  joined_at: string;
-  created_at?: string;
-  user_details?: {
-    username?: string;
-    full_name?: string;
-    avatar_url?: string;
+  profiles?: {
+    username: string | null;
+    full_name: string | null;
+    avatar_url: string | null;
   };
 }
 
-interface PendingRequestProject {
-  id: string;
-  title: string;
-  pendingRequests: ProjectMember[];
-}
-
-// Type guard function to validate status values
-const isValidStatus = (status: string): status is Project["status"] => {
-  return ["in-progress", "completed", "planned", "delayed"].includes(status);
-};
-
-// Type guard function to validate member status values
-const isValidMemberStatus = (status: string): status is ProjectMember["status"] => {
-  return ["pending", "accepted", "rejected"].includes(status);
-};
-
-// Function to convert Supabase data to Project type
-const convertToProject = (data: any, members: ProjectMember[]): Project => {
-  // Ensure the status is valid, otherwise default to "planned"
-  const status = isValidStatus(data.status) ? data.status : "planned";
-  
-  // Find if current user is a member and their status
-  const userMember = members.find(member => member.project_id === data.id);
-  
-  // Validate member status
-  let memberStatus: Project["memberStatus"] = null;
-  if (userMember?.status) {
-    memberStatus = isValidMemberStatus(userMember.status) 
-      ? userMember.status 
-      : "pending";
-  }
-  
-  return {
-    id: data.id,
-    title: data.title,
-    description: data.description || "",
-    status: status,
-    progress: data.progress || 0,
-    deadline: data.deadline,
-    collaborators: data.collaborators || 1,
-    created_at: data.created_at,
-    isCreator: userMember?.is_creator || false,
-    memberStatus: memberStatus
-  };
-};
-
+// Component for the Projects page
 const Projects = () => {
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   
+  // State variables
   const [projects, setProjects] = useState<Project[]>([]);
-  const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
-  const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
-  const [pendingRequestProjects, setPendingRequestProjects] = useState<PendingRequestProject[]>([]);
+  const [userProjects, setUserProjects] = useState<Project[]>([]);
+  const [joinedProjects, setJoinedProjects] = useState<Project[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<ProjectMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [currentFilter, setCurrentFilter] = useState("all");
-  
-  const [newProject, setNewProject] = useState({
+  const [activeTab, setActiveTab] = useState("all");
+  const [newProject, setNewProject] = useState<{
+    title: string;
+    description: string;
+    status: ProjectStatus;
+    deadline: string;
+  }>({
     title: "",
     description: "",
-    status: "planned" as Project["status"],
-    deadline: "",
-    collaborators: 1
+    status: "planned",
+    deadline: ""
   });
 
   useEffect(() => {
     document.title = "Projects | Learniverse";
-    if (!loading && !user) {
+    
+    // Redirect if not logged in
+    if (!authLoading && !user) {
       navigate("/auth");
     }
     
     if (user) {
       fetchProjects();
+      fetchPendingRequests();
     }
-  }, [loading, user, navigate]);
-
-  useEffect(() => {
-    filterProjects(currentFilter, searchTerm);
-  }, [projects, currentFilter, searchTerm]);
+  }, [authLoading, user, navigate]);
 
   const fetchProjects = async () => {
     try {
       setIsLoading(true);
       
-      // Fetch all project membership data for current user
-      const { data: memberData, error: memberError } = await supabase
-        .from("project_members")
-        .select("*")
-        .eq("user_id", user?.id);
-      
-      if (memberError) throw memberError;
-      
-      // Type-safe project members
-      const typedMembers: ProjectMember[] = (memberData || []).map(member => {
-        // Validate member status
-        const status = isValidMemberStatus(member.status) ? member.status : "pending";
-        
-        return {
-          id: member.id,
-          project_id: member.project_id,
-          user_id: member.user_id,
-          is_creator: member.is_creator || false,
-          status: status,
-          joined_at: member.joined_at || new Date().toISOString(),
-          created_at: member.created_at
-        };
-      });
-      
-      setProjectMembers(typedMembers);
-      
-      // Fetch ALL projects (not just user's projects) to make them visible to everyone
-      const { data, error } = await supabase
+      // Get all projects
+      const { data: allProjects, error: projectsError } = await supabase
         .from("projects")
         .select("*")
         .order("created_at", { ascending: false });
       
-      if (error) throw error;
+      if (projectsError) throw projectsError;
       
-      // Convert the data to the Project type with proper status validation
-      const typedProjects = (data || []).map(project => 
-        convertToProject(project, typedMembers)
-      );
+      // Get projects the user has created
+      const { data: ownProjects, error: ownProjectsError } = await supabase
+        .from("projects")
+        .select("*")
+        .eq("user_id", user?.id)
+        .order("created_at", { ascending: false });
       
-      setProjects(typedProjects);
-      setFilteredProjects(typedProjects);
+      if (ownProjectsError) throw ownProjectsError;
       
-      // Fetch pending requests for projects where user is creator
-      fetchPendingRequests();
+      // Get projects the user has joined
+      const { data: membershipData, error: membershipError } = await supabase
+        .from("project_members")
+        .select("project_id")
+        .eq("user_id", user?.id)
+        .eq("status", "approved");
+      
+      if (membershipError) throw membershipError;
+      
+      // Extract project IDs from memberships
+      const joinedProjectIds = membershipData?.map(item => item.project_id) || [];
+      
+      // Filter all projects to get the ones user has joined
+      const userJoinedProjects = (allProjects || [])
+        .filter(project => joinedProjectIds.includes(project.id));
+      
+      setProjects(allProjects || []);
+      setUserProjects(ownProjects || []);
+      setJoinedProjects(userJoinedProjects);
     } catch (error) {
       console.error("Error fetching projects:", error);
       toast({
@@ -188,87 +147,39 @@ const Projects = () => {
 
   const fetchPendingRequests = async () => {
     try {
-      // Get projects where current user is creator
-      const { data: creatorMemberships, error: creatorError } = await supabase
-        .from("project_members")
-        .select("project_id")
-        .eq("user_id", user?.id)
-        .eq("is_creator", true);
-      
-      if (creatorError) throw creatorError;
-      
-      if (!creatorMemberships || creatorMemberships.length === 0) {
-        setPendingRequestProjects([]);
-        return;
-      }
-      
-      const projectIds = creatorMemberships.map(membership => membership.project_id);
-      
-      // Get all pending requests for those projects
-      const { data: pendingMembers, error: pendingError } = await supabase
-        .from("project_members")
-        .select(`
-          id,
-          project_id,
-          user_id,
-          is_creator,
-          status,
-          joined_at,
-          created_at,
-          profiles:user_id(username, full_name, avatar_url)
-        `)
-        .in("project_id", projectIds)
-        .eq("status", "pending")
-        .neq("user_id", user?.id);
-      
-      if (pendingError) throw pendingError;
-      
-      if (!pendingMembers || pendingMembers.length === 0) {
-        setPendingRequestProjects([]);
-        return;
-      }
-      
-      // Get project details for the projects with pending requests
-      const { data: projectsData, error: projectsError } = await supabase
+      // First get project IDs where the user is the creator
+      const { data: userProjects, error: projectsError } = await supabase
         .from("projects")
-        .select("id, title")
-        .in("id", [...new Set(pendingMembers.map(member => member.project_id))]);
-      
+        .select("id")
+        .eq("user_id", user?.id);
+
       if (projectsError) throw projectsError;
-      
-      if (!projectsData) {
-        setPendingRequestProjects([]);
-        return;
+
+      if (userProjects && userProjects.length > 0) {
+        const projectIds = userProjects.map(p => p.id);
+
+        // Then fetch pending requests for those projects
+        const { data: requests, error: requestsError } = await supabase
+          .from("project_members")
+          .select(`
+            id,
+            project_id,
+            user_id,
+            status,
+            is_creator,
+            profiles:user_id (
+              username,
+              full_name,
+              avatar_url
+            )
+          `)
+          .in("project_id", projectIds)
+          .eq("status", "pending");
+
+        if (requestsError) throw requestsError;
+
+        setPendingRequests(requests || []);
       }
-      
-      // Format the members with user details
-      const formattedMembers: ProjectMember[] = pendingMembers.map(member => {
-        return {
-          id: member.id,
-          project_id: member.project_id,
-          user_id: member.user_id,
-          is_creator: !!member.is_creator,
-          status: isValidMemberStatus(member.status) ? member.status : "pending",
-          joined_at: member.joined_at,
-          created_at: member.created_at,
-          user_details: {
-            username: member.profiles?.username || "Unknown User",
-            full_name: member.profiles?.full_name || "",
-            avatar_url: member.profiles?.avatar_url || ""
-          }
-        };
-      });
-      
-      // Group pending requests by project
-      const pendingRequestsByProject: PendingRequestProject[] = projectsData.map(project => {
-        return {
-          id: project.id,
-          title: project.title,
-          pendingRequests: formattedMembers.filter(member => member.project_id === project.id)
-        };
-      }).filter(project => project.pendingRequests.length > 0);
-      
-      setPendingRequestProjects(pendingRequestsByProject);
     } catch (error) {
       console.error("Error fetching pending requests:", error);
     }
@@ -278,52 +189,69 @@ const Projects = () => {
     try {
       if (!newProject.title.trim()) {
         toast({
-          title: "Missing information",
-          description: "Project title is required",
+          title: "Title is required",
+          description: "Please enter a title for your project",
           variant: "destructive"
         });
         return;
       }
-
+      
       // Create the project
-      const { data, error } = await supabase
+      const { data: projectData, error: projectError } = await supabase
         .from("projects")
-        .insert({
-          title: newProject.title,
-          description: newProject.description,
-          status: newProject.status,
-          deadline: newProject.deadline || null,
-          collaborators: newProject.collaborators,
-          user_id: user?.id
-        })
-        .select();
-      
-      if (error) throw error;
-      
-      if (data && data.length > 0) {
-        // Add creator as project member
-        const { error: memberError } = await supabase
-          .from("project_members")
-          .insert({
-            project_id: data[0].id,
+        .insert([
+          {
+            title: newProject.title,
+            description: newProject.description,
+            status: newProject.status,
+            deadline: newProject.deadline || null,
             user_id: user?.id,
             is_creator: true,
-            status: "accepted" as const
-          });
-        
-        if (memberError) throw memberError;
+          }
+        ])
+        .select();
+      
+      if (projectError) {
+        throw projectError;
       }
       
-      toast({
-        title: "Project created",
-        description: "Your new project has been created successfully"
-      });
-      
-      // Refresh project data
-      fetchProjects();
-      
-      resetNewProjectForm();
-      setIsDialogOpen(false);
+      if (projectData && projectData.length > 0) {
+        // Add the creator as a project member
+        const { error: memberError } = await supabase
+          .from("project_members")
+          .insert([
+            {
+              project_id: projectData[0].id,
+              user_id: user?.id,
+              status: "approved",
+              is_creator: true,
+            }
+          ]);
+        
+        if (memberError) throw memberError;
+        
+        // Log activity
+        await supabase
+          .from("activities")
+          .insert([
+            {
+              user_id: user?.id,
+              type: "project",
+              title: "Project Created",
+              description: `You created a new project: ${newProject.title}`
+            }
+          ]);
+        
+        toast({
+          title: "Project created",
+          description: "Your new project has been created successfully"
+        });
+        
+        // Refresh projects list
+        fetchProjects();
+        resetNewProjectForm();
+        setIsDialogOpen(false);
+      }
     } catch (error) {
       console.error("Error creating project:", error);
       toast({
@@ -334,102 +262,61 @@ const Projects = () => {
     }
   };
 
-  const deleteProject = async (projectId: string) => {
+  const joinProject = async (projectId: string, projectTitle: string) => {
     try {
-      const { error } = await supabase
-        .from("projects")
-        .delete()
-        .eq("id", projectId);
+      // Check if user already has a pending request
+      const { data: existingRequest, error: checkError } = await supabase
+        .from("project_members")
+        .select("*")
+        .eq("project_id", projectId)
+        .eq("user_id", user?.id);
       
-      if (error) throw error;
+      if (checkError) throw checkError;
       
-      toast({
-        title: "Project deleted",
-        description: "The project has been deleted successfully"
-      });
+      if (existingRequest && existingRequest.length > 0) {
+        toast({
+          title: "Request already exists",
+          description: "You have already requested to join this project",
+          variant: "destructive"
+        });
+        return;
+      }
       
-      setProjects(projects.filter(project => project.id !== projectId));
-    } catch (error) {
-      console.error("Error deleting project:", error);
-      toast({
-        title: "Error deleting project",
-        description: "Please try again later",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const updateProjectStatus = async (projectId: string, newStatus: Project["status"], progress: number) => {
-    try {
-      const { error } = await supabase
-        .from("projects")
-        .update({ 
-          status: newStatus,
-          progress: progress,
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", projectId);
-      
-      if (error) throw error;
-      
-      setProjects(projects.map(project => 
-        project.id === projectId 
-          ? { ...project, status: newStatus, progress: progress } 
-          : project
-      ));
-      
-      toast({
-        title: "Project updated",
-        description: `Project status changed to ${newStatus}`
-      });
-    } catch (error) {
-      console.error("Error updating project:", error);
-      toast({
-        title: "Error updating project",
-        description: "Please try again later",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const requestToJoinProject = async (projectId: string) => {
-    try {
+      // Create the join request
       const { error } = await supabase
         .from("project_members")
-        .insert({
-          project_id: projectId,
-          user_id: user?.id,
-          is_creator: false,
-          status: "pending" as const
-        });
+        .insert([
+          {
+            project_id: projectId,
+            user_id: user?.id,
+            status: "pending",
+            is_creator: false,
+          }
+        ]);
       
       if (error) throw error;
+      
+      // Log activity
+      await supabase
+        .from("activities")
+        .insert([
+          {
+            user_id: user?.id,
+            type: "project",
+            title: "Join Request Sent",
+            description: `You requested to join: ${projectTitle}`
+          }
+        ]);
       
       toast({
         title: "Request sent",
-        description: "Your request to join this project has been sent"
+        description: "Your request to join the project has been sent"
       });
       
-      // Update local state - FIX: Create properly typed project member
-      const newMember: ProjectMember = {
-        id: Math.random().toString(), // Temporary ID until refresh
-        project_id: projectId,
-        user_id: user?.id || "",
-        is_creator: false,
-        status: "pending", // Now explicitly typed as "pending" from the union type
-        joined_at: new Date().toISOString()
-      };
-      
-      setProjectMembers([...projectMembers, newMember]);
-      
-      // Update the projects array to reflect the pending status
-      setProjects(projects.map(project => 
-        project.id === projectId 
-          ? { ...project, memberStatus: "pending" } 
-          : project
-      ));
+      // Refresh projects
+      fetchProjects();
     } catch (error) {
-      console.error("Error requesting to join project:", error);
+      console.error("Error joining project:", error);
       toast({
         title: "Error sending request",
         description: "Please try again later",
@@ -438,42 +325,80 @@ const Projects = () => {
     }
   };
 
-  const respondToJoinRequest = async (memberId: string, projectId: string, approved: boolean) => {
+  const respondToJoinRequest = async (requestId: string, projectId: string, userId: string, response: "approved" | "rejected") => {
     try {
-      const newStatus = approved ? "accepted" : "rejected";
-      
+      // Update the status of the join request
       const { error } = await supabase
         .from("project_members")
-        .update({ 
-          status: newStatus,
-          joined_at: approved ? new Date().toISOString() : null
-        })
-        .eq("id", memberId);
+        .update({ status: response })
+        .eq("id", requestId);
       
       if (error) throw error;
       
-      // Update project collaborator count if approved
-      if (approved) {
-        const project = projects.find(p => p.id === projectId);
-        if (project) {
-          const { error: projectError } = await supabase
-            .from("projects")
-            .update({ 
-              collaborators: project.collaborators + 1,
-              updated_at: new Date().toISOString()
-            })
-            .eq("id", projectId);
-          
-          if (projectError) throw projectError;
-        }
+      // Get the project title for notifications
+      const { data: projectData, error: projectError } = await supabase
+        .from("projects")
+        .select("title")
+        .eq("id", projectId)
+        .single();
+      
+      if (projectError) throw projectError;
+      
+      // Log activity for the user who requested to join
+      await supabase
+        .from("activities")
+        .insert([
+          {
+            user_id: userId,
+            type: "project",
+            title: response === "approved" ? "Join Request Approved" : "Join Request Declined",
+            description: `Your request to join "${projectData.title}" was ${response}`,
+            read: false
+          }
+        ]);
+      
+      // Also log activity for the project owner
+      await supabase
+        .from("activities")
+        .insert([
+          {
+            user_id: user?.id,
+            type: "project",
+            title: response === "approved" ? "New Team Member" : "Request Declined",
+            description: response === "approved" 
+              ? `You approved a new member for "${projectData.title}"` 
+              : `You declined a join request for "${projectData.title}"`,
+            read: true
+          }
+        ]);
+      
+      // If approved, update the project collaborators count
+      if (response === "approved") {
+        const { data: currentProject, error: countError } = await supabase
+          .from("projects")
+          .select("collaborators")
+          .eq("id", projectId)
+          .single();
+        
+        if (countError) throw countError;
+        
+        const { error: updateError } = await supabase
+          .from("projects")
+          .update({ collaborators: (currentProject.collaborators || 0) + 1 })
+          .eq("id", projectId);
+        
+        if (updateError) throw updateError;
       }
       
       toast({
-        title: approved ? "Request approved" : "Request declined",
-        description: approved ? "User has been added to the project" : "User request has been declined"
+        title: response === "approved" ? "Request approved" : "Request declined",
+        description: response === "approved" 
+          ? "The user can now collaborate on this project" 
+          : "The user's request has been declined",
       });
       
-      // Refresh project data and pending requests
+      // Refresh pending requests
+      fetchPendingRequests();
       fetchProjects();
     } catch (error) {
       console.error("Error responding to join request:", error);
@@ -485,22 +410,25 @@ const Projects = () => {
     }
   };
 
-  const filterProjects = (filter: string, search: string) => {
+  const filterProjects = () => {
     let filtered = [...projects];
     
-    if (filter !== "all") {
-      filtered = filtered.filter(project => project.status === filter);
+    // Apply tab filter
+    if (activeTab === "my") {
+      filtered = [...userProjects];
+    } else if (activeTab === "joined") {
+      filtered = [...joinedProjects];
     }
     
-    if (search.trim() !== "") {
-      const searchLower = search.toLowerCase();
+    // Apply search filter
+    if (searchTerm.trim() !== "") {
       filtered = filtered.filter(project => 
-        project.title.toLowerCase().includes(searchLower) || 
-        project.description.toLowerCase().includes(searchLower)
+        project.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        (project.description && project.description.toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }
     
-    setFilteredProjects(filtered);
+    return filtered;
   };
 
   const resetNewProjectForm = () => {
@@ -508,40 +436,36 @@ const Projects = () => {
       title: "",
       description: "",
       status: "planned",
-      deadline: "",
-      collaborators: 1
+      deadline: ""
     });
   };
 
-  const getStatusBadge = (status: Project["status"]) => {
-    switch (status) {
-      case "in-progress":
-        return <Badge variant="secondary" className="bg-blue-500/10 text-blue-500">In Progress</Badge>;
-      case "completed":
-        return <Badge variant="secondary" className="bg-green-500/10 text-green-500">Completed</Badge>;
-      case "planned":
-        return <Badge variant="secondary" className="bg-orange-500/10 text-orange-500">Planned</Badge>;
-      case "delayed":
-        return <Badge variant="secondary" className="bg-red-500/10 text-red-500">Delayed</Badge>;
-      default:
-        return <Badge variant="secondary">{status}</Badge>;
+  const isUserMember = (project: Project) => {
+    // Check if the user has created the project
+    if (project.user_id === user?.id) return true;
+    
+    // Check if the project is in joined projects
+    return joinedProjects.some(p => p.id === project.id);
+  };
+
+  const hasJoinRequest = (project: Project) => {
+    return pendingRequests.some(req => 
+      req.project_id === project.id && 
+      req.user_id === user?.id
+    );
+  };
+
+  // Calculate time ago from a timestamp
+  const getTimeAgo = (timestamp: string) => {
+    try {
+      return formatDistanceToNow(new Date(timestamp), { addSuffix: true });
+    } catch (e) {
+      return "recently";
     }
   };
 
-  const getMembershipBadge = (project: Project) => {
-    if (project.isCreator) {
-      return <Badge variant="outline" className="bg-purple-500/10 text-purple-500">Creator</Badge>;
-    } else if (project.memberStatus === "accepted") {
-      return <Badge variant="outline" className="bg-green-500/10 text-green-500">Member</Badge>;
-    } else if (project.memberStatus === "pending") {
-      return <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500">Pending</Badge>;
-    } else if (project.memberStatus === "rejected") {
-      return <Badge variant="outline" className="bg-red-500/10 text-red-500">Rejected</Badge>;
-    }
-    return null;
-  };
-
-  if (loading) {
+  // Show loading state while checking authentication
+  if (authLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
@@ -549,6 +473,7 @@ const Projects = () => {
     );
   }
 
+  // Redirect if not authenticated
   if (!user) {
     return <Navigate to="/auth" />;
   }
@@ -574,57 +499,6 @@ const Projects = () => {
           </div>
         </div>
 
-        {/* Pending Join Requests Section */}
-        {pendingRequestProjects.length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-xl font-semibold mb-4">Pending Join Requests</h2>
-            <div className="space-y-4">
-              {pendingRequestProjects.map((project) => (
-                <Card key={project.id} className="bg-white/5">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-lg">{project.title}</CardTitle>
-                    <CardDescription>
-                      {project.pendingRequests.length} {project.pendingRequests.length === 1 ? 'person' : 'people'} requesting to join
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="pb-2">
-                    <div className="divide-y divide-gray-800">
-                      {project.pendingRequests.map((request) => (
-                        <div key={request.id} className="py-3 flex justify-between items-center">
-                          <div>
-                            <p className="font-medium">{request.user_details?.full_name || request.user_details?.username || "Unknown User"}</p>
-                            <p className="text-sm text-muted-foreground">Requested {new Date(request.created_at || request.joined_at).toLocaleDateString()}</p>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              className="flex items-center gap-1"
-                              onClick={() => respondToJoinRequest(request.id, request.project_id, true)}
-                            >
-                              <Check className="h-4 w-4" />
-                              Approve
-                            </Button>
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              className="text-red-500 flex items-center gap-1"
-                              onClick={() => respondToJoinRequest(request.id, request.project_id, false)}
-                            >
-                              <X className="h-4 w-4" />
-                              Decline
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        )}
-
         <div className="bg-secondary/30 rounded-xl p-6">
           <div className="flex flex-col sm:flex-row justify-between gap-4 mb-6">
             <div className="relative w-full sm:w-64">
@@ -637,116 +511,158 @@ const Projects = () => {
               />
             </div>
             
-            <Tabs 
-              defaultValue="all" 
-              className="w-full sm:w-auto"
-              onValueChange={setCurrentFilter}
-            >
-              <TabsList className="grid grid-cols-4 w-full sm:w-auto">
-                <TabsTrigger value="all">All</TabsTrigger>
-                <TabsTrigger value="in-progress">In Progress</TabsTrigger>
-                <TabsTrigger value="planned">Planned</TabsTrigger>
-                <TabsTrigger value="completed">Completed</TabsTrigger>
-              </TabsList>
-            </Tabs>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="icon"
+                title="Filter projects"
+              >
+                <Filter className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
           
-          {isLoading ? (
-            <div className="flex justify-center items-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
+            <TabsList>
+              <TabsTrigger value="all">All Projects</TabsTrigger>
+              <TabsTrigger value="my">My Projects</TabsTrigger>
+              <TabsTrigger value="joined">Joined Projects</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          
+          {pendingRequests.length > 0 && (
+            <div className="mb-8">
+              <h3 className="text-lg font-semibold mb-4">Pending Join Requests</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {pendingRequests.map((request) => {
+                  // Find the project this request belongs to
+                  const project = projects.find(p => p.id === request.project_id);
+                  
+                  if (!project) return null;
+                  
+                  return (
+                    <div key={request.id} className="bg-yellow-500/10 p-4 rounded-lg">
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <h4 className="font-medium">{project.title}</h4>
+                          <p className="text-sm text-muted-foreground mb-2">
+                            {request.profiles?.username || request.profiles?.full_name || "Anonymous user"} wants to join
+                          </p>
+                        </div>
+                        <div className="bg-white/10 rounded-full p-1">
+                          <Clock className="h-4 w-4 text-yellow-500" />
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-2 mt-4">
+                        <Button 
+                          size="sm" 
+                          className="flex-1"
+                          onClick={() => respondToJoinRequest(request.id, request.project_id, request.user_id, "approved")}
+                        >
+                          <CheckCircle className="h-4 w-4 mr-1" /> Approve
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="flex-1"
+                          onClick={() => respondToJoinRequest(request.id, request.project_id, request.user_id, "rejected")}
+                        >
+                          <XCircle className="h-4 w-4 mr-1" /> Decline
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          ) : filteredProjects.length === 0 ? (
+          )}
+          
+          {isLoading ? (
+            <div className="animate-pulse space-y-4">
+              {[1, 2, 3, 4, 5, 6].map((_, i) => (
+                <div key={i} className="h-40 bg-white/5 rounded-lg"></div>
+              ))}
+            </div>
+          ) : filterProjects().length === 0 ? (
             <div className="text-center py-16">
+              <GitMerge className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-lg font-medium">No projects found</h3>
-              <p className="text-muted-foreground">
-                {searchTerm || currentFilter !== "all" 
-                  ? "Try changing your search filters"
-                  : "Create your first project to get started"}
+              <p className="text-muted-foreground mt-2 mb-6">
+                {activeTab === "all" 
+                  ? "There are no projects yet." 
+                  : activeTab === "my" 
+                    ? "You haven't created any projects yet." 
+                    : "You haven't joined any projects yet."}
               </p>
-              {!searchTerm && currentFilter === "all" && projects.length === 0 && (
-                <Button 
-                  onClick={() => setIsDialogOpen(true)} 
-                  variant="outline" 
-                  className="mt-4"
-                >
-                  Create Project
-                </Button>
-              )}
+              <Button onClick={() => setIsDialogOpen(true)}>Create Project</Button>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredProjects.map((project) => (
-                <div key={project.id} className="bg-white/5 hover:bg-white/10 transition-colors p-5 rounded-lg">
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="font-semibold text-lg">{project.title}</h3>
-                    <div className="flex flex-col items-end gap-1">
-                      {getStatusBadge(project.status)}
-                      {getMembershipBadge(project)}
-                    </div>
-                  </div>
-                  
-                  <p className="text-muted-foreground text-sm mb-4 line-clamp-2">{project.description}</p>
-                  
-                  <div className="mb-4">
-                    <div className="flex justify-between text-xs mb-1">
-                      <span>Progress</span>
-                      <span>{project.progress}%</span>
-                    </div>
-                    <Progress value={project.progress} className="h-1.5" />
-                  </div>
-                  
-                  <div className="flex justify-between items-center text-sm">
-                    {project.deadline ? (
-                      <div className="flex items-center gap-1">
-                        <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span>Due {new Date(project.deadline).toLocaleDateString()}</span>
+              {filterProjects().map((project) => (
+                <div key={project.id} className="bg-white/5 hover:bg-white/10 transition-colors rounded-lg overflow-hidden flex flex-col">
+                  <div className="p-5">
+                    <div className="flex justify-between items-start">
+                      <h3 className="font-semibold text-lg mb-1">{project.title}</h3>
+                      <div className={`px-2 py-1 text-xs rounded-full ${
+                        project.status === "planned" ? "bg-blue-500/20 text-blue-500" :
+                        project.status === "active" ? "bg-green-500/20 text-green-500" :
+                        "bg-purple-500/20 text-purple-500"
+                      }`}>
+                        {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
                       </div>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">No deadline</span>
-                    )}
-                    <span className="text-muted-foreground">
-                      {project.collaborators} {project.collaborators === 1 ? 'collaborator' : 'collaborators'}
-                    </span>
-                  </div>
-                  
-                  <div className="mt-4 pt-4 border-t border-white/10 flex justify-between">
-                    <div className="flex gap-2">
-                      {project.isCreator && project.status !== "completed" && (
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => updateProjectStatus(project.id, "completed", 100)}
-                        >
-                          Complete
-                        </Button>
-                      )}
-                      {project.isCreator && project.status === "planned" && (
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => updateProjectStatus(project.id, "in-progress", 25)}
-                        >
-                          Start
-                        </Button>
-                      )}
-                      {!project.memberStatus && !project.isCreator && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => requestToJoinProject(project.id)}
-                        >
-                          <UserPlus className="h-3 w-3 mr-1" />
-                          Join
-                        </Button>
+                    </div>
+                    
+                    <p className="text-muted-foreground text-sm mb-3 line-clamp-2">
+                      {project.description || "No description provided"}
+                    </p>
+                    
+                    <div className="flex items-center justify-between text-sm text-muted-foreground mb-2">
+                      <div className="flex items-center">
+                        <Users className="w-4 h-4 mr-1" />
+                        <span>{project.collaborators} members</span>
+                      </div>
+                      
+                      {project.deadline && (
+                        <div className="flex items-center">
+                          <Calendar className="w-4 h-4 mr-1" />
+                          <span>Due {getTimeAgo(project.deadline)}</span>
+                        </div>
                       )}
                     </div>
-                    {project.isCreator && (
+                    
+                    <div className="mt-2">
+                      <div className="flex justify-between items-center text-xs mb-1">
+                        <span>Progress</span>
+                        <span>{project.progress}%</span>
+                      </div>
+                      <Progress value={project.progress} className="h-1.5" />
+                    </div>
+                  </div>
+                  
+                  <div className="mt-auto pt-4 p-4 border-t border-white/10 flex justify-between">
+                    {isUserMember(project) ? (
                       <Button 
-                        variant="destructive" 
-                        size="sm"
-                        onClick={() => deleteProject(project.id)}
+                        className="w-full"
+                        onClick={() => navigate(`/projects/${project.id}`)}
                       >
-                        Delete
+                        View Project
+                      </Button>
+                    ) : hasJoinRequest(project) ? (
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        disabled
+                      >
+                        Request Pending
+                      </Button>
+                    ) : (
+                      <Button 
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => joinProject(project.id, project.title)}
+                      >
+                        Request to Join
                       </Button>
                     )}
                   </div>
@@ -757,6 +673,7 @@ const Projects = () => {
         </div>
       </main>
 
+      {/* Create Project Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -764,7 +681,7 @@ const Projects = () => {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <label htmlFor="title" className="text-sm font-medium">Title</label>
+              <label htmlFor="title" className="text-sm font-medium">Project Title</label>
               <Input
                 id="title"
                 placeholder="Enter project title"
@@ -777,7 +694,7 @@ const Projects = () => {
               <label htmlFor="description" className="text-sm font-medium">Description</label>
               <Input
                 id="description"
-                placeholder="Enter project description"
+                placeholder="What is this project about?"
                 value={newProject.description}
                 onChange={(e) => setNewProject({...newProject, description: e.target.value})}
               />
@@ -787,22 +704,13 @@ const Projects = () => {
               <label htmlFor="status" className="text-sm font-medium">Status</label>
               <select
                 id="status"
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm"
+                className="w-full px-3 py-2 rounded-md border border-input bg-transparent text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                 value={newProject.status}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (isValidStatus(value)) {
-                    setNewProject({
-                      ...newProject, 
-                      status: value
-                    });
-                  }
-                }}
+                onChange={(e) => setNewProject({...newProject, status: e.target.value as ProjectStatus})}
               >
                 <option value="planned">Planned</option>
-                <option value="in-progress">In Progress</option>
+                <option value="active">Active</option>
                 <option value="completed">Completed</option>
-                <option value="delayed">Delayed</option>
               </select>
             </div>
             
@@ -813,17 +721,6 @@ const Projects = () => {
                 type="date"
                 value={newProject.deadline}
                 onChange={(e) => setNewProject({...newProject, deadline: e.target.value})}
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <label htmlFor="collaborators" className="text-sm font-medium">Collaborators</label>
-              <Input
-                id="collaborators"
-                type="number"
-                min="1"
-                value={newProject.collaborators}
-                onChange={(e) => setNewProject({...newProject, collaborators: parseInt(e.target.value) || 1})}
               />
             </div>
           </div>
