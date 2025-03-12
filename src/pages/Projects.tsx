@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { 
@@ -23,7 +22,6 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/components/ui/use-toast";
 import { formatDistanceToNow } from "date-fns";
 
-// Define types for the project and its members
 type ProjectStatus = "planned" | "active" | "completed";
 
 interface Project {
@@ -52,13 +50,11 @@ interface ProjectMember {
   };
 }
 
-// Component for the Projects page
 const Projects = () => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   
-  // State variables
   const [projects, setProjects] = useState<Project[]>([]);
   const [userProjects, setUserProjects] = useState<Project[]>([]);
   const [joinedProjects, setJoinedProjects] = useState<Project[]>([]);
@@ -82,7 +78,6 @@ const Projects = () => {
   useEffect(() => {
     document.title = "Projects | Learniverse";
     
-    // Redirect if not logged in
     if (!authLoading && !user) {
       navigate("/auth");
     }
@@ -97,7 +92,6 @@ const Projects = () => {
     try {
       setIsLoading(true);
       
-      // Get all projects
       const { data: allProjects, error: projectsError } = await supabase
         .from("projects")
         .select("*")
@@ -105,7 +99,6 @@ const Projects = () => {
       
       if (projectsError) throw projectsError;
       
-      // Get projects the user has created
       const { data: ownProjects, error: ownProjectsError } = await supabase
         .from("projects")
         .select("*")
@@ -114,7 +107,19 @@ const Projects = () => {
       
       if (ownProjectsError) throw ownProjectsError;
       
-      // Get projects the user has joined
+      const typedAllProjects = (allProjects || []).map(project => ({
+        ...project,
+        status: project.status as ProjectStatus
+      }));
+      
+      const typedOwnProjects = (ownProjects || []).map(project => ({
+        ...project,
+        status: project.status as ProjectStatus
+      }));
+      
+      setProjects(typedAllProjects);
+      setUserProjects(typedOwnProjects);
+      
       const { data: membershipData, error: membershipError } = await supabase
         .from("project_members")
         .select("project_id")
@@ -123,15 +128,11 @@ const Projects = () => {
       
       if (membershipError) throw membershipError;
       
-      // Extract project IDs from memberships
       const joinedProjectIds = membershipData?.map(item => item.project_id) || [];
       
-      // Filter all projects to get the ones user has joined
-      const userJoinedProjects = (allProjects || [])
+      const userJoinedProjects = typedAllProjects
         .filter(project => joinedProjectIds.includes(project.id));
       
-      setProjects(allProjects || []);
-      setUserProjects(ownProjects || []);
       setJoinedProjects(userJoinedProjects);
     } catch (error) {
       console.error("Error fetching projects:", error);
@@ -147,39 +148,31 @@ const Projects = () => {
 
   const fetchPendingRequests = async () => {
     try {
-      // First get project IDs where the user is the creator
-      const { data: userProjects, error: projectsError } = await supabase
-        .from("projects")
-        .select("id")
-        .eq("user_id", user?.id);
+      const { data: requests, error: requestsError } = await supabase
+        .from("project_members")
+        .select(`
+          id,
+          project_id,
+          user_id,
+          status,
+          is_creator,
+          profiles:profiles!user_id(username, full_name, avatar_url)
+        `)
+        .eq("status", "pending");
 
-      if (projectsError) throw projectsError;
+      if (requestsError) throw requestsError;
 
-      if (userProjects && userProjects.length > 0) {
-        const projectIds = userProjects.map(p => p.id);
+      const transformedRequests: ProjectMember[] = (requests || []).map(req => ({
+        id: req.id,
+        project_id: req.project_id,
+        user_id: req.user_id,
+        status: req.status as "pending" | "approved" | "rejected",
+        username: req.profiles?.username || undefined,
+        full_name: req.profiles?.full_name || undefined,
+        avatar_url: req.profiles?.avatar_url || undefined
+      }));
 
-        // Then fetch pending requests for those projects
-        const { data: requests, error: requestsError } = await supabase
-          .from("project_members")
-          .select(`
-            id,
-            project_id,
-            user_id,
-            status,
-            is_creator,
-            profiles:user_id (
-              username,
-              full_name,
-              avatar_url
-            )
-          `)
-          .in("project_id", projectIds)
-          .eq("status", "pending");
-
-        if (requestsError) throw requestsError;
-
-        setPendingRequests(requests || []);
-      }
+      setPendingRequests(transformedRequests);
     } catch (error) {
       console.error("Error fetching pending requests:", error);
     }
@@ -196,7 +189,6 @@ const Projects = () => {
         return;
       }
       
-      // Create the project
       const { data: projectData, error: projectError } = await supabase
         .from("projects")
         .insert([
@@ -216,7 +208,6 @@ const Projects = () => {
       }
       
       if (projectData && projectData.length > 0) {
-        // Add the creator as a project member
         const { error: memberError } = await supabase
           .from("project_members")
           .insert([
@@ -230,7 +221,6 @@ const Projects = () => {
         
         if (memberError) throw memberError;
         
-        // Log activity
         await supabase
           .from("activities")
           .insert([
@@ -247,7 +237,6 @@ const Projects = () => {
           description: "Your new project has been created successfully"
         });
         
-        // Refresh projects list
         fetchProjects();
         resetNewProjectForm();
         setIsDialogOpen(false);
@@ -264,7 +253,6 @@ const Projects = () => {
 
   const joinProject = async (projectId: string, projectTitle: string) => {
     try {
-      // Check if user already has a pending request
       const { data: existingRequest, error: checkError } = await supabase
         .from("project_members")
         .select("*")
@@ -282,7 +270,6 @@ const Projects = () => {
         return;
       }
       
-      // Create the join request
       const { error } = await supabase
         .from("project_members")
         .insert([
@@ -296,7 +283,6 @@ const Projects = () => {
       
       if (error) throw error;
       
-      // Log activity
       await supabase
         .from("activities")
         .insert([
@@ -313,7 +299,6 @@ const Projects = () => {
         description: "Your request to join the project has been sent"
       });
       
-      // Refresh projects
       fetchProjects();
     } catch (error) {
       console.error("Error joining project:", error);
@@ -327,7 +312,6 @@ const Projects = () => {
 
   const respondToJoinRequest = async (requestId: string, projectId: string, userId: string, response: "approved" | "rejected") => {
     try {
-      // Update the status of the join request
       const { error } = await supabase
         .from("project_members")
         .update({ status: response })
@@ -335,7 +319,6 @@ const Projects = () => {
       
       if (error) throw error;
       
-      // Get the project title for notifications
       const { data: projectData, error: projectError } = await supabase
         .from("projects")
         .select("title")
@@ -344,7 +327,6 @@ const Projects = () => {
       
       if (projectError) throw projectError;
       
-      // Log activity for the user who requested to join
       await supabase
         .from("activities")
         .insert([
@@ -357,7 +339,6 @@ const Projects = () => {
           }
         ]);
       
-      // Also log activity for the project owner
       await supabase
         .from("activities")
         .insert([
@@ -372,7 +353,6 @@ const Projects = () => {
           }
         ]);
       
-      // If approved, update the project collaborators count
       if (response === "approved") {
         const { data: currentProject, error: countError } = await supabase
           .from("projects")
@@ -397,7 +377,6 @@ const Projects = () => {
           : "The user's request has been declined",
       });
       
-      // Refresh pending requests
       fetchPendingRequests();
       fetchProjects();
     } catch (error) {
@@ -413,14 +392,12 @@ const Projects = () => {
   const filterProjects = () => {
     let filtered = [...projects];
     
-    // Apply tab filter
     if (activeTab === "my") {
       filtered = [...userProjects];
     } else if (activeTab === "joined") {
       filtered = [...joinedProjects];
     }
     
-    // Apply search filter
     if (searchTerm.trim() !== "") {
       filtered = filtered.filter(project => 
         project.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -441,10 +418,8 @@ const Projects = () => {
   };
 
   const isUserMember = (project: Project) => {
-    // Check if the user has created the project
     if (project.user_id === user?.id) return true;
     
-    // Check if the project is in joined projects
     return joinedProjects.some(p => p.id === project.id);
   };
 
@@ -455,7 +430,6 @@ const Projects = () => {
     );
   };
 
-  // Calculate time ago from a timestamp
   const getTimeAgo = (timestamp: string) => {
     try {
       return formatDistanceToNow(new Date(timestamp), { addSuffix: true });
@@ -464,7 +438,6 @@ const Projects = () => {
     }
   };
 
-  // Show loading state while checking authentication
   if (authLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -473,7 +446,6 @@ const Projects = () => {
     );
   }
 
-  // Redirect if not authenticated
   if (!user) {
     return <Navigate to="/auth" />;
   }
@@ -535,7 +507,6 @@ const Projects = () => {
               <h3 className="text-lg font-semibold mb-4">Pending Join Requests</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {pendingRequests.map((request) => {
-                  // Find the project this request belongs to
                   const project = projects.find(p => p.id === request.project_id);
                   
                   if (!project) return null;
@@ -673,7 +644,6 @@ const Projects = () => {
         </div>
       </main>
 
-      {/* Create Project Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>

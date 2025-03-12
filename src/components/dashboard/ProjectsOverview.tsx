@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, GitMerge, Users } from "lucide-react";
@@ -54,7 +53,12 @@ const ProjectsOverview = () => {
 
       if (error) throw error;
 
-      setProjects(data || []);
+      const typedProjects = (data || []).map(project => ({
+        ...project,
+        status: project.status as ProjectStatus
+      }));
+
+      setProjects(typedProjects);
     } catch (error) {
       console.error("Error fetching projects:", error);
     } finally {
@@ -64,7 +68,6 @@ const ProjectsOverview = () => {
 
   const fetchPendingRequests = async () => {
     try {
-      // First get project IDs where the user is the creator
       const { data: userProjects, error: projectsError } = await supabase
         .from("projects")
         .select("id")
@@ -76,7 +79,6 @@ const ProjectsOverview = () => {
       if (userProjects && userProjects.length > 0) {
         const projectIds = userProjects.map(p => p.id);
 
-        // Then fetch pending requests for those projects
         const { data: requests, error: requestsError } = await supabase
           .from("project_members")
           .select(`
@@ -84,26 +86,21 @@ const ProjectsOverview = () => {
             project_id,
             user_id,
             status,
-            profiles:user_id (
-              username,
-              full_name,
-              avatar_url
-            )
+            profiles:profiles!user_id(username, full_name, avatar_url)
           `)
           .in("project_id", projectIds)
           .eq("status", "pending");
 
         if (requestsError) throw requestsError;
 
-        // Transform the results to flatten the structure
-        const transformedRequests = (requests || []).map(req => ({
+        const transformedRequests: ProjectMember[] = (requests || []).map(req => ({
           id: req.id,
           project_id: req.project_id,
           user_id: req.user_id,
-          status: req.status,
-          username: req.profiles?.username,
-          full_name: req.profiles?.full_name,
-          avatar_url: req.profiles?.avatar_url
+          status: req.status as "pending" | "approved" | "rejected",
+          username: req.profiles?.username || undefined,
+          full_name: req.profiles?.full_name || undefined,
+          avatar_url: req.profiles?.avatar_url || undefined
         }));
 
         setPendingRequests(transformedRequests);
