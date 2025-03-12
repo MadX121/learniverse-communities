@@ -43,9 +43,11 @@ interface ProjectMember {
   user_id: string;
   status: "pending" | "approved" | "rejected";
   is_creator: boolean;
-  username?: string;
-  full_name?: string;
-  avatar_url?: string;
+  profiles: {
+    username: string | null;
+    full_name: string | null;
+    avatar_url: string | null;
+  } | null;
 }
 
 const Projects = () => {
@@ -170,9 +172,7 @@ const Projects = () => {
         user_id: req.user_id,
         status: req.status as "pending" | "approved" | "rejected",
         is_creator: req.is_creator || false,
-        username: req.profiles?.username,
-        full_name: req.profiles?.full_name,
-        avatar_url: req.profiles?.avatar_url
+        profiles: req.profiles
       }));
 
       setPendingRequests(transformedRequests);
