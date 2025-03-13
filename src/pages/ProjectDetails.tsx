@@ -65,7 +65,7 @@ interface ProjectComment {
 }
 
 const ProjectDetails = () => {
-  const { id: projectId } = useParams();
+  const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -126,28 +126,33 @@ const ProjectDetails = () => {
       setMembers(membersData as ProjectMember[]);
       
       // Find project creator
-      const creator = membersData.find(member => member.is_creator);
-      if (creator) setCreator(creator);
+      const creatorMember = membersData.find(member => member.is_creator);
+      if (creatorMember) setCreator(creatorMember);
       
       // Check if user has liked the project
       if (user) {
-        const { data: likeData } = await supabase
+        const { data: likeData, error: likeError } = await supabase
           .from("project_likes")
           .select("*")
           .eq("project_id", projectId)
-          .eq("user_id", user.id)
-          .single();
+          .eq("user_id", user.id);
           
-        setIsLiked(!!likeData);
+        if (!likeError && likeData && likeData.length > 0) {
+          setIsLiked(true);
+        } else {
+          setIsLiked(false);
+        }
       }
       
       // Get total likes count
-      const { count } = await supabase
+      const { count, error: countError } = await supabase
         .from("project_likes")
-        .select("*", { count: "exact" })
+        .select("*", { count: "exact", head: true })
         .eq("project_id", projectId);
         
-      setLikesCount(count || 0);
+      if (!countError) {
+        setLikesCount(count || 0);
+      }
     } catch (error) {
       console.error("Error fetching project details:", error);
       toast({
@@ -180,15 +185,17 @@ const ProjectDetails = () => {
         
       if (error) throw error;
       
-      const formattedComments = data.map(comment => ({
-        id: comment.id,
-        content: comment.content,
-        created_at: comment.created_at,
-        user_id: comment.user_id,
-        profile: comment.profiles
-      }));
-      
-      setComments(formattedComments);
+      if (data) {
+        const formattedComments = data.map(comment => ({
+          id: comment.id,
+          content: comment.content,
+          created_at: comment.created_at,
+          user_id: comment.user_id,
+          profile: comment.profiles
+        }));
+        
+        setComments(formattedComments);
+      }
     } catch (error) {
       console.error("Error fetching comments:", error);
     }
@@ -226,23 +233,27 @@ const ProjectDetails = () => {
     try {
       if (isLiked) {
         // Unlike
-        await supabase
+        const { error } = await supabase
           .from("project_likes")
           .delete()
           .eq("project_id", projectId)
           .eq("user_id", user.id);
           
+        if (error) throw error;
+        
         setIsLiked(false);
         setLikesCount(prev => prev - 1);
       } else {
         // Like
-        await supabase
+        const { error } = await supabase
           .from("project_likes")
           .insert({
             project_id: projectId,
             user_id: user.id
           });
           
+        if (error) throw error;
+        
         setIsLiked(true);
         setLikesCount(prev => prev + 1);
       }
@@ -293,20 +304,22 @@ const ProjectDetails = () => {
         
       if (error) throw error;
       
-      const formattedComment = {
-        id: data.id,
-        content: data.content,
-        created_at: data.created_at,
-        user_id: data.user_id,
-        profile: data.profiles
-      };
-      
-      setComments(prev => [formattedComment, ...prev]);
-      setNewComment('');
-      toast({
-        title: "Comment added",
-        description: "Your comment has been posted successfully"
-      });
+      if (data) {
+        const formattedComment = {
+          id: data.id,
+          content: data.content,
+          created_at: data.created_at,
+          user_id: data.user_id,
+          profile: data.profiles
+        };
+        
+        setComments(prev => [formattedComment, ...prev]);
+        setNewComment('');
+        toast({
+          title: "Comment added",
+          description: "Your comment has been posted successfully"
+        });
+      }
     } catch (error) {
       console.error("Error posting comment:", error);
       toast({
