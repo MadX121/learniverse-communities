@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { formatDistanceToNow } from "date-fns";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface Activity {
   id: string;
@@ -133,12 +134,20 @@ const ActivityFeed = () => {
   };
 
   return (
-    <div className="bg-secondary/30 rounded-xl p-4 h-full">
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.98 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.3 }}
+      className="bg-secondary/30 rounded-xl p-5 h-full border border-white/5 backdrop-blur-lg shadow-lg"
+    >
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold">Activity Feed</h3>
+        <h3 className="text-lg font-semibold flex items-center">
+          <Bell className="h-4 w-4 mr-2 text-primary" />
+          Activity Feed
+        </h3>
         <button 
           onClick={markAllAsRead} 
-          className="text-xs text-primary hover:underline"
+          className="text-xs text-primary hover:underline hover:text-primary/80 transition-colors"
           disabled={activities.every(a => a.read)}
         >
           Mark all as read
@@ -159,39 +168,57 @@ const ActivityFeed = () => {
           ))}
         </div>
       ) : activities.length === 0 ? (
-        <div className="text-center py-12">
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="text-center py-12"
+        >
+          <Bell className="h-10 w-10 text-muted-foreground/30 mx-auto mb-2" />
           <p className="text-muted-foreground">No activities yet</p>
           <p className="text-xs text-muted-foreground mt-1">
             Activities will appear here as you use the platform
           </p>
-        </div>
+        </motion.div>
       ) : (
-        <div className="space-y-3 overflow-y-auto hide-scrollbar max-h-[400px]">
-          {activities.map((activity) => (
-            <div 
-              key={activity.id}
-              onClick={() => !activity.read && markAsRead(activity.id)}
-              className={cn(
-                "flex items-start gap-3 p-3 rounded-lg transition-all",
-                activity.read ? "bg-transparent" : "bg-accent/10 cursor-pointer"
-              )}
-            >
-              <div className="mt-1">
-                {getActivityIcon(activity.type)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm">
-                  {activity.title}
-                  {!activity.read && <span className="ml-2 h-2 w-2 rounded-full bg-primary inline-block"></span>}
-                </p>
-                <p className="text-muted-foreground text-xs">{activity.description}</p>
-                <p className="text-xs text-foreground/60 mt-1">{getTimeAgo(activity.created_at)}</p>
-              </div>
-            </div>
-          ))}
+        <div className="space-y-2 overflow-y-auto hide-scrollbar max-h-[400px] pr-1">
+          <AnimatePresence>
+            {activities.map((activity, index) => (
+              <motion.div 
+                key={activity.id}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.05 }}
+                onClick={() => !activity.read && markAsRead(activity.id)}
+                className={cn(
+                  "flex items-start gap-3 p-3 rounded-lg transition-all",
+                  activity.read ? "bg-transparent" : "bg-accent/10 cursor-pointer hover:bg-accent/15"
+                )}
+                whileHover={{ scale: 1.01 }}
+              >
+                <div className="mt-1 p-2 rounded-full bg-white/5">
+                  {getActivityIcon(activity.type)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm flex items-center">
+                    {activity.title}
+                    {!activity.read && (
+                      <motion.span 
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="ml-2 h-2 w-2 rounded-full bg-primary inline-block"
+                      />
+                    )}
+                  </p>
+                  <p className="text-muted-foreground text-xs">{activity.description}</p>
+                  <p className="text-xs text-foreground/60 mt-1">{getTimeAgo(activity.created_at)}</p>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 };
 

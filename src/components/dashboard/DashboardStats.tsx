@@ -4,6 +4,7 @@ import { Sparkles, BarChart3, Award, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { motion } from "framer-motion";
 
 interface StatCardProps {
   title: string;
@@ -11,6 +12,7 @@ interface StatCardProps {
   change: number;
   icon: any;
   iconBg: string;
+  delay: number;
 }
 
 interface DashboardStats {
@@ -20,13 +22,23 @@ interface DashboardStats {
   upcomingDeadlines: number;
 }
 
-const StatCard = ({ title, value, change, icon: Icon, iconBg }: StatCardProps) => {
+const StatCard = ({ title, value, change, icon: Icon, iconBg, delay }: StatCardProps) => {
   return (
-    <div className="glass rounded-xl p-4 flex items-center">
-      <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center mr-4", iconBg)}>
-        <Icon className="w-6 h-6 text-white" />
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.9, y: 20 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      transition={{ duration: 0.4, delay: delay * 0.1 }}
+      whileHover={{ 
+        y: -5, 
+        boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
+        transition: { duration: 0.2 }
+      }}
+      className="glass rounded-xl p-5 flex items-center relative overflow-hidden border border-white/5 backdrop-blur-lg"
+    >
+      <div className={cn("w-14 h-14 rounded-xl flex items-center justify-center mr-4", iconBg)}>
+        <Icon className="w-7 h-7 text-white" />
       </div>
-      <div>
+      <div className="z-10">
         <div className="text-sm text-muted-foreground">{title}</div>
         <div className="text-2xl font-semibold">{value}</div>
         <div className={cn(
@@ -36,7 +48,10 @@ const StatCard = ({ title, value, change, icon: Icon, iconBg }: StatCardProps) =
           {change > 0 ? "+" : ""}{change}% from last week
         </div>
       </div>
-    </div>
+      <div className="absolute -right-8 -bottom-8 w-24 h-24 opacity-5">
+        <Icon className="w-full h-full" />
+      </div>
+    </motion.div>
   );
 };
 
@@ -182,7 +197,7 @@ const DashboardStats = () => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       {statsArray.map((stat, index) => (
-        <StatCard key={index} {...stat} />
+        <StatCard key={index} {...stat} delay={index} />
       ))}
     </div>
   );
