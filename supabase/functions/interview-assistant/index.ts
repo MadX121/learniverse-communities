@@ -2,7 +2,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 
-const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+// Use the hardcoded API key since there's no .env file support
+const openAIApiKey = "sk-r07Ugps1JYCbcCk5V6OV4HsY2qlHYoh3K2VmPFRo6XT3BlbkFJMpXXC7B9mYqiQd14Teacc0fr95E2pfYj8455toqAoA";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,6 +19,10 @@ serve(async (req) => {
   try {
     const { sessionId, prompt, category } = await req.json();
 
+    console.log(`Processing interview request for session ${sessionId}`);
+    console.log(`Category: ${category}`);
+    console.log(`Prompt: ${prompt.substring(0, 100)}...`);
+    
     // Create system prompt based on interview category
     let systemPrompt = "You are an expert technical interviewer. ";
     
@@ -58,9 +63,8 @@ serve(async (req) => {
     
     systemPrompt += " Provide realistic interview questions and detailed, constructive feedback on answers.";
 
-    console.log(`Processing interview assistant request for session ${sessionId}, category: ${category}`);
+    console.log(`Using API key: ${openAIApiKey.substring(0, 5)}...`);
     console.log(`System prompt: ${systemPrompt}`);
-    console.log(`User prompt: ${prompt.substring(0, 100)}...`);
 
     // Call OpenAI API with streaming disabled for easier response handling
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -83,12 +87,14 @@ serve(async (req) => {
     // Check if the response was successful
     if (!response.ok) {
       const errorData = await response.json();
+      console.error('OpenAI API error:', JSON.stringify(errorData));
       throw new Error(errorData.error?.message || `OpenAI API error: ${response.status}`);
     }
 
     const data = await response.json();
     
     if (data.error) {
+      console.error('Error in OpenAI response:', data.error);
       throw new Error(data.error.message || "Error from OpenAI API");
     }
     

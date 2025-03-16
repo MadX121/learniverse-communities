@@ -2,7 +2,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 
-const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+// Use the hardcoded API key since there's no .env file support
+const openAIApiKey = "sk-r07Ugps1JYCbcCk5V6OV4HsY2qlHYoh3K2VmPFRo6XT3BlbkFJMpXXC7B9mYqiQd14Teacc0fr95E2pfYj8455toqAoA";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -21,6 +22,9 @@ serve(async (req) => {
     if (!audioBase64) {
       throw new Error("Missing audio data");
     }
+
+    console.log(`Using API key: ${openAIApiKey.substring(0, 5)}...`);
+    console.log("Audio data received, processing...");
 
     // Convert base64 to binary
     const binaryString = atob(audioBase64);
@@ -49,6 +53,7 @@ serve(async (req) => {
     // Check if the response was successful
     if (!response.ok) {
       const errorData = await response.json();
+      console.error('Whisper API error:', JSON.stringify(errorData));
       throw new Error(errorData.error?.message || `Whisper API error: ${response.status}`);
     }
 
