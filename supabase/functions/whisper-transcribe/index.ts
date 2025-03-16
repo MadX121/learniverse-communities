@@ -35,6 +35,8 @@ serve(async (req) => {
     formData.append('file', blob, 'audio.webm');
     formData.append('model', 'whisper-1');
 
+    console.log("Calling OpenAI Whisper API to transcribe audio...");
+
     // Call OpenAI Whisper API
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
@@ -44,9 +46,10 @@ serve(async (req) => {
       body: formData,
     });
 
+    // Check if the response was successful
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error?.message || "Error transcribing audio");
+      throw new Error(errorData.error?.message || `Whisper API error: ${response.status}`);
     }
 
     const data = await response.json();

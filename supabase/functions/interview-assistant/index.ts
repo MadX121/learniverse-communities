@@ -49,6 +49,9 @@ serve(async (req) => {
       case "Managerial":
         systemPrompt += "Focus on leadership skills, conflict resolution, team management, and strategic thinking.";
         break;
+      case "Data Science":
+        systemPrompt += "Focus on statistical analysis, machine learning, data visualization, and predictive modeling techniques.";
+        break;
       default:
         systemPrompt += `Focus on ${category} concepts and best practices.`;
     }
@@ -76,6 +79,12 @@ serve(async (req) => {
         max_tokens: 1000,
       }),
     });
+
+    // Check if the response was successful
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error?.message || `OpenAI API error: ${response.status}`);
+    }
 
     const data = await response.json();
     

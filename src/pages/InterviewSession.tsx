@@ -124,15 +124,13 @@ const InterviewSession = () => {
         throw new Error(response.error.message || "Failed to generate question");
       }
 
-      const data = await response.data;
-      
-      if (data && data.aiResponse) {
+      if (response.data && response.data.aiResponse) {
         setQuestions([{
           id: `q-${Date.now()}`,
-          text: data.aiResponse
+          text: response.data.aiResponse
         }]);
       } else {
-        throw new Error("Failed to generate question");
+        throw new Error("Failed to generate question: No response data");
       }
     } catch (error) {
       console.error("Error generating question:", error);
@@ -231,8 +229,11 @@ const InterviewSession = () => {
           throw new Error(transcribeResponse.error.message || "Failed to transcribe audio");
         }
 
-        const transcriptionData = await transcribeResponse.data;
-        const transcribedText = transcriptionData?.transcription || "";
+        if (!transcribeResponse.data || !transcribeResponse.data.transcription) {
+          throw new Error("No transcription data received");
+        }
+
+        const transcribedText = transcribeResponse.data.transcription;
         setTranscription(transcribedText);
         
         // Update the questions array with the response
@@ -295,40 +296,42 @@ const InterviewSession = () => {
         throw new Error(evalResponse.error.message || "Failed to evaluate response");
       }
 
-      const data = await evalResponse.data;
+      if (!evalResponse.data || !evalResponse.data.aiResponse) {
+        throw new Error("No evaluation data received");
+      }
       
-      if (data && data.aiResponse) {
-        // Parse the evaluation
-        const relevanceMatch = data.aiResponse.match(/RELEVANCE: (\d+)/);
-        const clarityMatch = data.aiResponse.match(/CLARITY: (\d+)/);
-        const confidenceMatch = data.aiResponse.match(/CONFIDENCE: (\d+)/);
-        const overallMatch = data.aiResponse.match(/OVERALL: (\d+)/);
-        const feedbackMatch = data.aiResponse.match(/FEEDBACK: ([\s\S]+)$/);
-        
-        const evaluation = {
-          relevance: relevanceMatch ? parseInt(relevanceMatch[1]) : 0,
-          clarity: clarityMatch ? parseInt(clarityMatch[1]) : 0,
-          confidence: confidenceMatch ? parseInt(confidenceMatch[1]) : 0,
-          overall: overallMatch ? parseInt(overallMatch[1]) : 0,
-          feedback: feedbackMatch ? feedbackMatch[1].trim() : ""
-        };
-        
-        // Update the questions array with the evaluation
-        const updatedQuestions = [...questions];
-        updatedQuestions[currentQuestionIndex] = {
-          ...updatedQuestions[currentQuestionIndex],
-          evaluation
-        };
-        setQuestions(updatedQuestions);
-        
-        // If this is not the last question, generate the next question
-        if (currentQuestionIndex < 4) {
-          // Generate next question
-          await generateNextQuestion(response, question, session?.category || "");
-        } else {
-          // This was the last question, complete the interview
-          await completeInterview(updatedQuestions);
-        }
+      const aiResponseText = evalResponse.data.aiResponse;
+      
+      // Parse the evaluation
+      const relevanceMatch = aiResponseText.match(/RELEVANCE: (\d+)/);
+      const clarityMatch = aiResponseText.match(/CLARITY: (\d+)/);
+      const confidenceMatch = aiResponseText.match(/CONFIDENCE: (\d+)/);
+      const overallMatch = aiResponseText.match(/OVERALL: (\d+)/);
+      const feedbackMatch = aiResponseText.match(/FEEDBACK: ([\s\S]+)$/);
+      
+      const evaluation = {
+        relevance: relevanceMatch ? parseInt(relevanceMatch[1]) : 0,
+        clarity: clarityMatch ? parseInt(clarityMatch[1]) : 0,
+        confidence: confidenceMatch ? parseInt(confidenceMatch[1]) : 0,
+        overall: overallMatch ? parseInt(overallMatch[1]) : 0,
+        feedback: feedbackMatch ? feedbackMatch[1].trim() : ""
+      };
+      
+      // Update the questions array with the evaluation
+      const updatedQuestions = [...questions];
+      updatedQuestions[currentQuestionIndex] = {
+        ...updatedQuestions[currentQuestionIndex],
+        evaluation
+      };
+      setQuestions(updatedQuestions);
+      
+      // If this is not the last question, generate the next question
+      if (currentQuestionIndex < 4) {
+        // Generate next question
+        await generateNextQuestion(response, question, session?.category || "");
+      } else {
+        // This was the last question, complete the interview
+        await completeInterview(updatedQuestions);
       }
     } catch (error) {
       console.error("Error evaluating response:", error);
@@ -369,21 +372,21 @@ const InterviewSession = () => {
         throw new Error(response.error.message || "Failed to generate next question");
       }
 
-      const data = await response.data;
-      
-      if (data && data.aiResponse) {
-        // Add the new question
-        setQuestions(prev => [
-          ...prev,
-          {
-            id: `q-${Date.now()}`,
-            text: data.aiResponse
-          }
-        ]);
-        
-        // Move to the next question
-        setCurrentQuestionIndex(prev => prev + 1);
+      if (!response.data || !response.data.aiResponse) {
+        throw new Error("No question data received");
       }
+      
+      // Add the new question
+      setQuestions(prev => [
+        ...prev,
+        {
+          id: `q-${Date.now()}`,
+          text: response.data.aiResponse
+        }
+      ]);
+      
+      // Move to the next question
+      setCurrentQuestionIndex(prev => prev + 1);
     } catch (error) {
       console.error("Error generating next question:", error);
       toast({
@@ -433,9 +436,11 @@ const InterviewSession = () => {
       if (feedbackResponse.error) {
         throw new Error(feedbackResponse.error.message || "Failed to generate feedback");
       }
-
-      const data = await feedbackResponse.data;
       
+      if (!feedbackResponse.data || !feedbackResponse.data.aiResponse) {
+        throw new Error("No feedback data received");
+      }
+
       // Update the session in the database
       const { error } = await supabase
         .from("interview_sessions")
@@ -443,7 +448,7 @@ const InterviewSession = () => {
           completed: true,
           completed_at: new Date().toISOString(),
           score: averageScore,
-          feedback: data.aiResponse
+          feedback: feedbackResponse.data.aiResponse
         })
         .eq("id", sessionId);
       
@@ -457,7 +462,7 @@ const InterviewSession = () => {
           completed: true,
           completed_at: new Date().toISOString(),
           score: averageScore,
-          feedback: data.aiResponse
+          feedback: feedbackResponse.data.aiResponse
         };
       });
       
