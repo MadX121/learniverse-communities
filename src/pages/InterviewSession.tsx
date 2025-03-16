@@ -7,7 +7,11 @@ import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/components/ui/use-toast";
-import { Mic, MicOff, Loader2, ArrowLeft, MessageSquare, Zap, Award, Brain, BarChart3, LayoutGrid, BadgeCheck } from "lucide-react";
+import { 
+  Mic, MicOff, Loader2, ArrowLeft, MessageSquare, Zap, 
+  Award, Brain, BarChart3, VolumeX, Volume2, CirclePause, 
+  CirclePlay, BadgeCheck 
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 // Define types for our interview session
@@ -24,6 +28,7 @@ interface InterviewSession {
 interface Question {
   id: string;
   text: string;
+  audioContent?: string;
   response?: string;
   evaluation?: {
     relevance: number;
@@ -52,9 +57,15 @@ const InterviewSession = () => {
   const [processingResponse, setProcessingResponse] = useState(false);
   const [transcription, setTranscription] = useState("");
   
+  // Audio state
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [muted, setMuted] = useState(false);
+  
   // Media recorder refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   
   // Auto-scroll ref
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -72,6 +83,48 @@ const InterviewSession = () => {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [questions, transcription]);
+  
+  // Initialize audio element
+  useEffect(() => {
+    audioRef.current = new Audio();
+    audioRef.current.addEventListener('ended', () => {
+      setIsPlaying(false);
+    });
+    
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.removeEventListener('ended', () => {
+          setIsPlaying(false);
+        });
+      }
+    };
+  }, []);
+  
+  // Set up audio URL when audioContent changes
+  useEffect(() => {
+    const currentQuestion = questions[currentQuestionIndex];
+    if (currentQuestion?.audioContent && !audioUrl) {
+      const base64Audio = currentQuestion.audioContent;
+      const audioBlob = base64ToBlob(base64Audio, 'audio/mp3');
+      const url = URL.createObjectURL(audioBlob);
+      setAudioUrl(url);
+      
+      // Auto-play the audio when it's first loaded
+      if (audioRef.current && !muted) {
+        audioRef.current.src = url;
+        audioRef.current.onloadedmetadata = () => {
+          playAudio();
+        };
+      }
+    }
+    
+    return () => {
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+    };
+  }, [questions, currentQuestionIndex]);
   
   // Function to fetch session data
   const fetchSessionData = async () => {
@@ -110,12 +163,13 @@ const InterviewSession = () => {
   // Generate initial question based on category
   const generateInitialQuestion = async (category: string) => {
     try {
-      // Call our edge function to get a question
+      // Call our edge function to get a question with audio
       const response = await supabase.functions.invoke("interview-assistant", {
         body: {
           sessionId,
           prompt: `You are conducting a ${category} interview. Provide a challenging first question that would be asked in this type of interview. Make it sound like a real interviewer is asking the question.`,
-          category
+          category,
+          generateAudio: true
         }
       });
       
@@ -124,10 +178,11 @@ const InterviewSession = () => {
         throw new Error(response.error.message || "Failed to generate question");
       }
 
-      if (response.data && response.data.aiResponse) {
+      if (response.data) {
         setQuestions([{
           id: `q-${Date.now()}`,
-          text: response.data.aiResponse
+          text: response.data.aiResponse,
+          audioContent: response.data.audioContent
         }]);
       } else {
         throw new Error("Failed to generate question: No response data");
@@ -139,6 +194,61 @@ const InterviewSession = () => {
         description: "Failed to generate interview question. Please try again.",
         variant: "destructive"
       });
+    }
+  };
+  
+  // Function to convert base64 to blob
+  const base64ToBlob = (base64: string, mimeType: string): Blob => {
+    const byteCharacters = atob(base64);
+    const byteArrays = [];
+    
+    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+      const slice = byteCharacters.slice(offset, offset + 512);
+      
+      const byteNumbers = new Array(slice.length);
+      for (let i = 0; i < slice.length; i++) {
+        byteNumbers[i] = slice.charCodeAt(i);
+      }
+      
+      const byteArray = new Uint8Array(byteNumbers);
+      byteArrays.push(byteArray);
+    }
+    
+    return new Blob(byteArrays, { type: mimeType });
+  };
+  
+  // Play audio
+  const playAudio = () => {
+    if (audioRef.current && audioUrl) {
+      audioRef.current.src = audioUrl;
+      audioRef.current.play()
+        .then(() => {
+          setIsPlaying(true);
+        })
+        .catch(err => {
+          console.error("Error playing audio:", err);
+          toast({
+            title: "Error",
+            description: "Failed to play audio. Please check your audio settings.",
+            variant: "destructive"
+          });
+        });
+    }
+  };
+  
+  // Pause audio
+  const pauseAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    }
+  };
+  
+  // Toggle mute
+  const toggleMute = () => {
+    setMuted(!muted);
+    if (audioRef.current) {
+      audioRef.current.muted = !muted;
     }
   };
   
@@ -352,7 +462,7 @@ const InterviewSession = () => {
     category: string
   ) => {
     try {
-      // Call our edge function to get the next question
+      // Call our edge function to get the next question with audio
       const response = await supabase.functions.invoke("interview-assistant", {
         body: {
           sessionId,
@@ -363,7 +473,8 @@ const InterviewSession = () => {
           The candidate's response was: "${prevResponse}"
           
           Based on this, provide a logical follow-up question that would be asked in this type of interview. Make it sound natural as if a real interviewer is asking the question. The question should probe deeper or explore a different aspect relevant to the interview category.`,
-          category
+          category,
+          generateAudio: true
         }
       });
       
@@ -372,7 +483,7 @@ const InterviewSession = () => {
         throw new Error(response.error.message || "Failed to generate next question");
       }
 
-      if (!response.data || !response.data.aiResponse) {
+      if (!response.data) {
         throw new Error("No question data received");
       }
       
@@ -381,12 +492,16 @@ const InterviewSession = () => {
         ...prev,
         {
           id: `q-${Date.now()}`,
-          text: response.data.aiResponse
+          text: response.data.aiResponse,
+          audioContent: response.data.audioContent
         }
       ]);
       
       // Move to the next question
       setCurrentQuestionIndex(prev => prev + 1);
+      
+      // Reset audio URL for the new question
+      setAudioUrl(null);
     } catch (error) {
       console.error("Error generating next question:", error);
       toast({
@@ -717,8 +832,18 @@ const InterviewSession = () => {
               <p className="text-primary/80">Question {currentQuestionIndex + 1} of 5</p>
             </div>
             
-            <div className="bg-primary/20 text-primary font-medium rounded-full px-4 py-2 text-sm">
-              In Progress
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={toggleMute}
+                className="p-2 rounded-full bg-black/30 hover:bg-black/50 transition-colors"
+                aria-label={muted ? "Unmute" : "Mute"}
+              >
+                {muted ? <VolumeX className="h-5 w-5 text-white/70" /> : <Volume2 className="h-5 w-5 text-white/70" />}
+              </button>
+              
+              <div className="bg-primary/20 text-primary font-medium rounded-full px-4 py-2 text-sm">
+                In Progress
+              </div>
             </div>
           </div>
           
@@ -737,9 +862,24 @@ const InterviewSession = () => {
           </div>
           
           <div className="mb-6 bg-gradient-to-b from-black/60 to-black/40 border border-white/10 rounded-xl overflow-hidden shadow-xl">
-            <div className="p-4 border-b border-white/10 bg-black/20 flex items-center gap-2">
-              <MessageSquare className="h-5 w-5 text-primary" />
-              <span className="font-medium">Interview Chat</span>
+            <div className="p-4 border-b border-white/10 bg-black/20 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5 text-primary" />
+                <span className="font-medium">Voice Interview</span>
+              </div>
+              
+              {audioUrl && !processingResponse && (
+                <button
+                  onClick={isPlaying ? pauseAudio : playAudio}
+                  className="p-2 rounded-full bg-primary/20 hover:bg-primary/30 transition-colors"
+                >
+                  {isPlaying ? (
+                    <CirclePause className="h-5 w-5 text-primary" />
+                  ) : (
+                    <CirclePlay className="h-5 w-5 text-primary" />
+                  )}
+                </button>
+              )}
             </div>
             
             <div 
@@ -761,6 +901,12 @@ const InterviewSession = () => {
                       </div>
                       <div className="bg-black/40 rounded-lg p-4 inline-block border border-white/5 shadow-lg">
                         <p className="text-white/90">{question.text}</p>
+                        {index === currentQuestionIndex && question.audioContent && (
+                          <div className="mt-2 text-xs text-primary/70 flex items-center gap-1">
+                            <Volume2 className="h-3 w-3" />
+                            <span>{isPlaying ? "Playing audio..." : "Audio available"}</span>
+                          </div>
+                        )}
                       </div>
                     </motion.div>
                     
@@ -916,11 +1062,11 @@ const InterviewSession = () => {
           <div className="text-sm text-white/70 bg-black/20 p-4 rounded-lg border border-white/5">
             <div className="flex items-center gap-2 mb-2">
               <Zap className="h-4 w-4 text-amber-400" />
-              <span>Speak clearly and naturally as if in a real interview.</span>
+              <span>Listen to the interviewer's questions and respond clearly.</span>
             </div>
             <div className="flex items-center gap-2">
               <Zap className="h-4 w-4 text-amber-400" />
-              <span>Your response will be evaluated on relevance, clarity, and confidence.</span>
+              <span>Click the play button to hear the question again if needed.</span>
             </div>
           </div>
         </motion.div>
@@ -940,4 +1086,3 @@ const getPerformanceLabel = (score: number): string => {
 };
 
 export default InterviewSession;
-

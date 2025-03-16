@@ -17,11 +17,12 @@ serve(async (req) => {
   }
 
   try {
-    const { sessionId, prompt, category } = await req.json();
+    const { sessionId, prompt, category, generateAudio = false } = await req.json();
 
     console.log(`Processing interview request for session ${sessionId}`);
     console.log(`Category: ${category}`);
     console.log(`Prompt: ${prompt.substring(0, 100)}...`);
+    console.log(`Generate Audio: ${generateAudio}`);
     
     // Create system prompt based on interview category
     let systemPrompt = "You are an expert technical interviewer. ";
@@ -99,12 +100,50 @@ serve(async (req) => {
     }
     
     const aiResponse = data.choices[0].message.content;
+    let audioContent = null;
+    
+    // Generate speech from text if requested
+    if (generateAudio) {
+      try {
+        console.log("Generating audio from text...");
+        const speechResponse = await fetch('https://api.openai.com/v1/audio/speech', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${openAIApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'tts-1',
+            voice: 'nova',
+            input: aiResponse,
+            response_format: 'mp3',
+          }),
+        });
+
+        if (!speechResponse.ok) {
+          const speechErrorData = await speechResponse.json();
+          console.error('OpenAI Speech API error:', JSON.stringify(speechErrorData));
+          throw new Error(speechErrorData.error?.message || `OpenAI Speech API error: ${speechResponse.status}`);
+        }
+
+        // Convert audio buffer to base64
+        const audioBuffer = await speechResponse.arrayBuffer();
+        audioContent = btoa(String.fromCharCode(...new Uint8Array(audioBuffer)));
+        console.log("Audio generation successful");
+      } catch (speechError) {
+        console.error('Error generating speech:', speechError);
+        // Continue without audio if speech generation fails
+      }
+    }
     
     console.log(`Session ID: ${sessionId} - Processed interview response for category: ${category}`);
     console.log(`Response preview: ${aiResponse.substring(0, 100)}...`);
 
-    // Return the AI response
-    return new Response(JSON.stringify({ aiResponse }), {
+    // Return the AI response and audio content
+    return new Response(JSON.stringify({ 
+      aiResponse, 
+      audioContent 
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
