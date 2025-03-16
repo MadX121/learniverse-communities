@@ -1,5 +1,5 @@
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, Fragment } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -119,12 +119,17 @@ const InterviewSession = () => {
         }
       });
       
-      const { aiResponse } = await response.json();
+      // Check if the response was successful
+      if (response.error) {
+        throw new Error(response.error.message || "Failed to generate question");
+      }
+
+      const data = await response.data;
       
-      if (aiResponse) {
+      if (data && data.aiResponse) {
         setQuestions([{
           id: `q-${Date.now()}`,
-          text: aiResponse
+          text: data.aiResponse
         }]);
       } else {
         throw new Error("Failed to generate question");
@@ -209,27 +214,25 @@ const InterviewSession = () => {
       reader.readAsDataURL(blob);
       
       reader.onloadend = async () => {
-        const base64Audio = reader.result?.toString().split(',')[1];
+        const base64Data = reader.result?.toString();
+        const base64Audio = base64Data ? base64Data.split(',')[1] : null;
         
         if (!base64Audio) {
           throw new Error("Failed to convert audio to base64");
         }
         
         // First, transcribe the audio using Whisper API via an edge function
-        const transcribeResponse = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            audio: base64Audio,
-            model: "whisper-1"
-          })
+        const transcribeResponse = await supabase.functions.invoke("whisper-transcribe", {
+          body: { audioBase64: base64Audio }
         });
-        
-        const transcriptionData = await transcribeResponse.json();
-        const transcribedText = transcriptionData.text || "";
+
+        // Check if the response was successful
+        if (transcribeResponse.error) {
+          throw new Error(transcribeResponse.error.message || "Failed to transcribe audio");
+        }
+
+        const transcriptionData = await transcribeResponse.data;
+        const transcribedText = transcriptionData?.transcription || "";
         setTranscription(transcribedText);
         
         // Update the questions array with the response
@@ -287,15 +290,20 @@ const InterviewSession = () => {
         }
       });
       
-      const { aiResponse } = await evalResponse.json();
+      // Check if the response was successful
+      if (evalResponse.error) {
+        throw new Error(evalResponse.error.message || "Failed to evaluate response");
+      }
+
+      const data = await evalResponse.data;
       
-      if (aiResponse) {
+      if (data && data.aiResponse) {
         // Parse the evaluation
-        const relevanceMatch = aiResponse.match(/RELEVANCE: (\d+)/);
-        const clarityMatch = aiResponse.match(/CLARITY: (\d+)/);
-        const confidenceMatch = aiResponse.match(/CONFIDENCE: (\d+)/);
-        const overallMatch = aiResponse.match(/OVERALL: (\d+)/);
-        const feedbackMatch = aiResponse.match(/FEEDBACK: ([\s\S]+)$/);
+        const relevanceMatch = data.aiResponse.match(/RELEVANCE: (\d+)/);
+        const clarityMatch = data.aiResponse.match(/CLARITY: (\d+)/);
+        const confidenceMatch = data.aiResponse.match(/CONFIDENCE: (\d+)/);
+        const overallMatch = data.aiResponse.match(/OVERALL: (\d+)/);
+        const feedbackMatch = data.aiResponse.match(/FEEDBACK: ([\s\S]+)$/);
         
         const evaluation = {
           relevance: relevanceMatch ? parseInt(relevanceMatch[1]) : 0,
@@ -356,15 +364,20 @@ const InterviewSession = () => {
         }
       });
       
-      const { aiResponse } = await response.json();
+      // Check if the response was successful
+      if (response.error) {
+        throw new Error(response.error.message || "Failed to generate next question");
+      }
+
+      const data = await response.data;
       
-      if (aiResponse) {
+      if (data && data.aiResponse) {
         // Add the new question
         setQuestions(prev => [
           ...prev,
           {
             id: `q-${Date.now()}`,
-            text: aiResponse
+            text: data.aiResponse
           }
         ]);
         
@@ -416,7 +429,12 @@ const InterviewSession = () => {
         }
       });
       
-      const { aiResponse } = await feedbackResponse.json();
+      // Check if the response was successful
+      if (feedbackResponse.error) {
+        throw new Error(feedbackResponse.error.message || "Failed to generate feedback");
+      }
+
+      const data = await feedbackResponse.data;
       
       // Update the session in the database
       const { error } = await supabase
@@ -425,7 +443,7 @@ const InterviewSession = () => {
           completed: true,
           completed_at: new Date().toISOString(),
           score: averageScore,
-          feedback: aiResponse
+          feedback: data.aiResponse
         })
         .eq("id", sessionId);
       
@@ -439,7 +457,7 @@ const InterviewSession = () => {
           completed: true,
           completed_at: new Date().toISOString(),
           score: averageScore,
-          feedback: aiResponse
+          feedback: data.aiResponse
         };
       });
       
@@ -654,7 +672,7 @@ const InterviewSession = () => {
             >
               <AnimatePresence>
                 {questions.map((question, index) => (
-                  <React.Fragment key={question.id}>
+                  <Fragment key={question.id}>
                     {/* Question */}
                     <motion.div 
                       initial={{ opacity: 0, y: 20 }}
@@ -716,7 +734,7 @@ const InterviewSession = () => {
                         </div>
                       </motion.div>
                     )}
-                  </React.Fragment>
+                  </Fragment>
                 ))}
                 
                 {/* Current transcription */}
