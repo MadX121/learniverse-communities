@@ -7,7 +7,7 @@ import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/components/ui/use-toast";
-import { Mic, MicOff, Loader2, ArrowLeft, MessageSquare, Zap, Award } from "lucide-react";
+import { Mic, MicOff, Loader2, ArrowLeft, MessageSquare, Zap, Award, Brain, BarChart3, LayoutGrid, BadgeCheck } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 // Define types for our interview session
@@ -483,13 +483,20 @@ const InterviewSession = () => {
   // Render loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-gradient-to-b from-background to-secondary/20">
         <Navbar />
         <main className="container mx-auto px-4 pt-24 pb-16 max-w-7xl flex items-center justify-center">
-          <div className="text-center">
-            <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
-            <p className="text-lg text-muted-foreground">Loading interview session...</p>
-          </div>
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-center bg-black/40 p-8 rounded-xl backdrop-blur-sm"
+          >
+            <Loader2 className="h-16 w-16 animate-spin text-primary mx-auto mb-6" />
+            <p className="text-lg font-medium mb-2">Loading your interview session</p>
+            <p className="text-muted-foreground">
+              Preparing questions for {session?.category || "your"} interview...
+            </p>
+          </motion.div>
         </main>
       </div>
     );
@@ -498,7 +505,7 @@ const InterviewSession = () => {
   // Render completed interview
   if (session?.completed) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-gradient-to-b from-background to-secondary/20">
         <Navbar />
         <main className="container mx-auto px-4 pt-24 pb-16 max-w-7xl">
           <div className="mb-6">
@@ -511,101 +518,154 @@ const InterviewSession = () => {
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-secondary/30 rounded-xl p-6 mb-8"
+            className="bg-black/50 backdrop-blur-md rounded-xl p-8 mb-8 border border-primary/20 shadow-lg"
           >
-            <div className="flex flex-col md:flex-row justify-between gap-6 mb-6">
+            <div className="flex flex-col md:flex-row justify-between gap-6 mb-8">
               <div>
-                <h1 className="text-3xl font-bold mb-2">Interview Completed</h1>
-                <p className="text-muted-foreground">
+                <h1 className="text-3xl font-bold mb-2 text-white">Interview Completed</h1>
+                <p className="text-primary/80">
                   {session.category} Interview • {new Date(session.created_at).toLocaleDateString()}
                 </p>
               </div>
               
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-6">
                 <div className="text-center">
-                  <div className="text-4xl font-bold text-primary">{session.score || 0}</div>
-                  <div className="text-sm text-muted-foreground">Overall Score</div>
+                  <div className="relative w-24 h-24 flex items-center justify-center">
+                    <svg className="w-full h-full" viewBox="0 0 100 100">
+                      <circle 
+                        className="fill-none stroke-white/10" 
+                        strokeWidth="8" 
+                        cx="50" 
+                        cy="50" 
+                        r="40"
+                      />
+                      <circle 
+                        className="fill-none stroke-primary" 
+                        strokeWidth="8" 
+                        strokeLinecap="round" 
+                        strokeDasharray={`${(session.score || 0) * 2.51} 251`}
+                        strokeDashoffset="0" 
+                        cx="50" 
+                        cy="50" 
+                        r="40"
+                        transform="rotate(-90 50 50)"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center flex-col">
+                      <div className="text-3xl font-bold text-white">{session.score || 0}</div>
+                      <div className="text-xs text-primary/80">SCORE</div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex flex-col gap-2">
+                  <div className="bg-white/5 p-2 rounded-lg flex items-center gap-2">
+                    <Award className="h-5 w-5 text-amber-400" />
+                    <span className="text-sm">{getPerformanceLabel(session.score || 0)}</span>
+                  </div>
+                  <div className="bg-white/5 p-2 rounded-lg flex items-center gap-2">
+                    <BadgeCheck className="h-5 w-5 text-green-400" />
+                    <span className="text-sm">All Questions Answered</span>
+                  </div>
                 </div>
               </div>
             </div>
             
             <div className="mb-8">
-              <h2 className="text-xl font-semibold mb-4">Overall Feedback</h2>
-              <div className="bg-white/5 rounded-lg p-4">
-                <p className="whitespace-pre-line">{session.feedback}</p>
+              <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                <Brain className="h-5 w-5 text-primary" />
+                Overall Feedback
+              </h2>
+              <div className="bg-white/5 rounded-lg p-6 border border-white/10">
+                <p className="whitespace-pre-line text-white/90">{session.feedback}</p>
               </div>
             </div>
             
             <div>
-              <h2 className="text-xl font-semibold mb-4">Detailed Breakdown</h2>
+              <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-primary" />
+                Detailed Breakdown
+              </h2>
               <div className="space-y-6">
                 {questions.map((question, index) => (
-                  <div key={question.id} className="bg-white/5 rounded-lg p-4">
-                    <div className="font-medium mb-2">Question {index + 1}:</div>
-                    <p className="mb-4">{question.text}</p>
+                  <motion.div 
+                    key={question.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    className="bg-white/5 rounded-lg p-6 border border-white/10"
+                  >
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="bg-primary/20 text-primary rounded-full w-6 h-6 flex items-center justify-center text-sm font-medium">
+                        {index + 1}
+                      </div>
+                      <div className="font-medium text-lg">Question {index + 1}</div>
+                    </div>
+                    
+                    <p className="mb-6 text-white/90">{question.text}</p>
                     
                     {question.response && (
-                      <>
-                        <div className="font-medium mb-2">Your Response:</div>
-                        <p className="mb-4 text-muted-foreground">{question.response}</p>
-                      </>
+                      <div className="mb-6">
+                        <div className="font-medium mb-2 text-primary/80">Your Response:</div>
+                        <p className="text-white/70 bg-black/20 p-4 rounded-lg border border-white/5">{question.response}</p>
+                      </div>
                     )}
                     
                     {question.evaluation && (
                       <>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                          <div>
-                            <div className="text-sm text-muted-foreground mb-1">Relevance</div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                          <div className="bg-black/30 p-3 rounded-lg">
+                            <div className="text-sm text-primary/80 mb-1">Relevance</div>
                             <div className="relative h-2 bg-white/10 rounded-full overflow-hidden">
                               <div 
                                 className="absolute top-0 left-0 h-full bg-blue-500 rounded-full"
                                 style={{ width: `${question.evaluation.relevance}%` }}
                               />
                             </div>
-                            <div className="text-right text-sm mt-1">{question.evaluation.relevance}/100</div>
+                            <div className="text-right text-sm mt-1 font-medium">{question.evaluation.relevance}/100</div>
                           </div>
                           
-                          <div>
-                            <div className="text-sm text-muted-foreground mb-1">Clarity</div>
+                          <div className="bg-black/30 p-3 rounded-lg">
+                            <div className="text-sm text-primary/80 mb-1">Clarity</div>
                             <div className="relative h-2 bg-white/10 rounded-full overflow-hidden">
                               <div 
                                 className="absolute top-0 left-0 h-full bg-green-500 rounded-full"
                                 style={{ width: `${question.evaluation.clarity}%` }}
                               />
                             </div>
-                            <div className="text-right text-sm mt-1">{question.evaluation.clarity}/100</div>
+                            <div className="text-right text-sm mt-1 font-medium">{question.evaluation.clarity}/100</div>
                           </div>
                           
-                          <div>
-                            <div className="text-sm text-muted-foreground mb-1">Confidence</div>
+                          <div className="bg-black/30 p-3 rounded-lg">
+                            <div className="text-sm text-primary/80 mb-1">Confidence</div>
                             <div className="relative h-2 bg-white/10 rounded-full overflow-hidden">
                               <div 
                                 className="absolute top-0 left-0 h-full bg-purple-500 rounded-full"
                                 style={{ width: `${question.evaluation.confidence}%` }}
                               />
                             </div>
-                            <div className="text-right text-sm mt-1">{question.evaluation.confidence}/100</div>
+                            <div className="text-right text-sm mt-1 font-medium">{question.evaluation.confidence}/100</div>
                           </div>
                           
-                          <div>
-                            <div className="text-sm text-muted-foreground mb-1">Overall</div>
+                          <div className="bg-black/30 p-3 rounded-lg">
+                            <div className="text-sm text-primary/80 mb-1">Overall</div>
                             <div className="relative h-2 bg-white/10 rounded-full overflow-hidden">
                               <div 
                                 className="absolute top-0 left-0 h-full bg-primary rounded-full"
                                 style={{ width: `${question.evaluation.overall}%` }}
                               />
                             </div>
-                            <div className="text-right text-sm mt-1">{question.evaluation.overall}/100</div>
+                            <div className="text-right text-sm mt-1 font-medium">{question.evaluation.overall}/100</div>
                           </div>
                         </div>
                         
                         <div>
-                          <div className="font-medium mb-2">Feedback:</div>
-                          <p className="text-sm">{question.evaluation.feedback}</p>
+                          <div className="font-medium mb-2 text-primary/80">Feedback:</div>
+                          <p className="text-white/80">{question.evaluation.feedback}</p>
                         </div>
                       </>
                     )}
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             </div>
@@ -615,13 +675,17 @@ const InterviewSession = () => {
             <Button 
               variant="outline"
               onClick={() => navigate("/interview-prep")}
+              className="gap-2"
             >
+              <ArrowLeft className="h-4 w-4" />
               Back to Dashboard
             </Button>
             
             <Button 
               onClick={() => navigate("/interview-prep/session/" + Date.now())}
+              className="gap-2 bg-primary hover:bg-primary/80"
             >
+              <Mic className="h-4 w-4" />
               Start New Interview
             </Button>
           </div>
@@ -632,7 +696,7 @@ const InterviewSession = () => {
   
   // Render active interview
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-b from-background to-secondary/20">
       <Navbar />
       <main className="container mx-auto px-4 pt-24 pb-16 max-w-7xl">
         <div className="mb-6">
@@ -645,35 +709,42 @@ const InterviewSession = () => {
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-secondary/30 rounded-xl p-6 mb-8"
+          className="bg-black/50 backdrop-blur-md rounded-xl p-8 mb-8 border border-primary/20 shadow-lg"
         >
           <div className="flex justify-between items-center mb-6">
             <div>
-              <h1 className="text-2xl font-bold">{session?.category} Interview</h1>
-              <p className="text-muted-foreground">Question {currentQuestionIndex + 1} of 5</p>
+              <h1 className="text-2xl md:text-3xl font-bold">{session?.category} Interview</h1>
+              <p className="text-primary/80">Question {currentQuestionIndex + 1} of 5</p>
             </div>
             
-            <div className="bg-primary/10 text-primary font-medium rounded-full px-4 py-2 text-sm">
+            <div className="bg-primary/20 text-primary font-medium rounded-full px-4 py-2 text-sm">
               In Progress
             </div>
           </div>
           
-          <div className="mb-4">
-            <div className="w-full bg-black/20 h-2 rounded-full mb-1 overflow-hidden">
-              <div 
-                className="bg-primary h-full rounded-full transition-all duration-500"
-                style={{ width: `${(currentQuestionIndex / 5) * 100}%` }}
+          <div className="mb-6">
+            <div className="w-full bg-black/40 h-3 rounded-full mb-2 overflow-hidden">
+              <motion.div 
+                initial={{ width: 0 }}
+                animate={{ width: `${(currentQuestionIndex / 5) * 100}%` }}
+                transition={{ duration: 0.5 }}
+                className="bg-primary h-full rounded-full"
               />
             </div>
-            <div className="text-xs text-muted-foreground">
+            <div className="text-xs text-primary/80">
               {Math.round((currentQuestionIndex / 5) * 100)}% Complete
             </div>
           </div>
           
-          <div className="border border-white/10 rounded-lg bg-white/5 h-[400px] mb-6 overflow-hidden flex flex-col">
+          <div className="mb-6 bg-gradient-to-b from-black/60 to-black/40 border border-white/10 rounded-xl overflow-hidden shadow-xl">
+            <div className="p-4 border-b border-white/10 bg-black/20 flex items-center gap-2">
+              <MessageSquare className="h-5 w-5 text-primary" />
+              <span className="font-medium">Interview Chat</span>
+            </div>
+            
             <div 
               ref={chatContainerRef}
-              className="flex-1 overflow-y-auto p-4 space-y-4"
+              className="h-[400px] overflow-y-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent"
             >
               <AnimatePresence>
                 {questions.map((question, index) => (
@@ -688,8 +759,8 @@ const InterviewSession = () => {
                       <div className="bg-primary/20 text-primary rounded-full p-2 flex-shrink-0">
                         <MessageSquare className="h-5 w-5" />
                       </div>
-                      <div className="bg-secondary/50 rounded-lg p-3 inline-block">
-                        <p>{question.text}</p>
+                      <div className="bg-black/40 rounded-lg p-4 inline-block border border-white/5 shadow-lg">
+                        <p className="text-white/90">{question.text}</p>
                       </div>
                     </motion.div>
                     
@@ -700,8 +771,8 @@ const InterviewSession = () => {
                         animate={{ opacity: 1, y: 0 }}
                         className="flex items-start gap-3 ml-12"
                       >
-                        <div className="bg-secondary/80 rounded-lg p-3 inline-block">
-                          <p>{question.response}</p>
+                        <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 inline-block border border-white/5 shadow-lg">
+                          <p className="text-white/80">{question.response}</p>
                         </div>
                       </motion.div>
                     )}
@@ -713,29 +784,29 @@ const InterviewSession = () => {
                         animate={{ opacity: 1, y: 0 }}
                         className="flex items-start gap-3"
                       >
-                        <div className="bg-green-500/20 text-green-500 rounded-full p-2 flex-shrink-0">
+                        <div className="bg-green-500/20 text-green-400 rounded-full p-2 flex-shrink-0">
                           <Award className="h-5 w-5" />
                         </div>
-                        <div className="bg-secondary/50 rounded-lg p-3">
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
+                        <div className="bg-black/40 backdrop-blur-sm rounded-lg p-4 border border-green-500/20 shadow-lg">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                             <div>
-                              <div className="text-xs text-muted-foreground">Relevance</div>
+                              <div className="text-xs text-primary/80">Relevance</div>
                               <div className="font-medium">{question.evaluation.relevance}/100</div>
                             </div>
                             <div>
-                              <div className="text-xs text-muted-foreground">Clarity</div>
+                              <div className="text-xs text-primary/80">Clarity</div>
                               <div className="font-medium">{question.evaluation.clarity}/100</div>
                             </div>
                             <div>
-                              <div className="text-xs text-muted-foreground">Confidence</div>
+                              <div className="text-xs text-primary/80">Confidence</div>
                               <div className="font-medium">{question.evaluation.confidence}/100</div>
                             </div>
                             <div>
-                              <div className="text-xs text-muted-foreground">Overall</div>
+                              <div className="text-xs text-primary/80">Overall</div>
                               <div className="font-medium">{question.evaluation.overall}/100</div>
                             </div>
                           </div>
-                          <p className="text-sm">{question.evaluation.feedback}</p>
+                          <p className="text-sm text-white/80">{question.evaluation.feedback}</p>
                         </div>
                       </motion.div>
                     )}
@@ -749,8 +820,8 @@ const InterviewSession = () => {
                     animate={{ opacity: 1, y: 0 }}
                     className="flex items-start gap-3 ml-12"
                   >
-                    <div className="bg-secondary/80 rounded-lg p-3 inline-block">
-                      <p>{transcription}</p>
+                    <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 inline-block border border-white/5 shadow-lg">
+                      <p className="text-white/80">{transcription}</p>
                     </div>
                   </motion.div>
                 )}
@@ -759,7 +830,7 @@ const InterviewSession = () => {
               {/* Processing indicator */}
               {processingResponse && (
                 <div className="flex justify-center py-4">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2 text-sm text-primary/80">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Processing your response...
                   </div>
@@ -767,7 +838,7 @@ const InterviewSession = () => {
               )}
             </div>
             
-            <div className="p-4 border-t border-white/10 flex justify-center">
+            <div className="p-6 border-t border-white/10 bg-black/30 flex justify-center">
               <AnimatePresence mode="wait">
                 {!recording && !processingResponse && questions[currentQuestionIndex] && !questions[currentQuestionIndex].response && (
                   <motion.div
@@ -779,7 +850,7 @@ const InterviewSession = () => {
                     <Button 
                       onClick={startRecording} 
                       size="lg"
-                      className="gap-2 h-12 px-6 bg-green-600 hover:bg-green-700 text-white"
+                      className="gap-2 h-12 px-6 bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-900/30"
                     >
                       <Mic className="h-5 w-5" />
                       Start Recording
@@ -801,13 +872,13 @@ const InterviewSession = () => {
                         onClick={stopRecording} 
                         size="lg"
                         variant="destructive"
-                        className="gap-2 h-12 px-6 relative"
+                        className="gap-2 h-12 px-6 relative shadow-lg shadow-red-900/30"
                       >
                         <MicOff className="h-5 w-5" />
                         Stop Recording
                       </Button>
                     </div>
-                    <div className="text-xs text-muted-foreground">Recording...</div>
+                    <div className="text-xs text-primary">Recording in progress...</div>
                   </motion.div>
                 )}
                 
@@ -818,7 +889,7 @@ const InterviewSession = () => {
                     exit={{ opacity: 0, scale: 0.8 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <Button disabled className="gap-2">
+                    <Button disabled className="gap-2 shadow-lg">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Processing...
                     </Button>
@@ -832,7 +903,7 @@ const InterviewSession = () => {
                     exit={{ opacity: 0, scale: 0.8 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <Button disabled className="gap-2">
+                    <Button disabled className="gap-2 shadow-lg">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Evaluating response...
                     </Button>
@@ -842,13 +913,13 @@ const InterviewSession = () => {
             </div>
           </div>
           
-          <div className="text-sm text-muted-foreground">
+          <div className="text-sm text-white/70 bg-black/20 p-4 rounded-lg border border-white/5">
             <div className="flex items-center gap-2 mb-2">
-              <Zap className="h-4 w-4 text-amber-500" />
+              <Zap className="h-4 w-4 text-amber-400" />
               <span>Speak clearly and naturally as if in a real interview.</span>
             </div>
             <div className="flex items-center gap-2">
-              <Zap className="h-4 w-4 text-amber-500" />
+              <Zap className="h-4 w-4 text-amber-400" />
               <span>Your response will be evaluated on relevance, clarity, and confidence.</span>
             </div>
           </div>
@@ -858,4 +929,15 @@ const InterviewSession = () => {
   );
 };
 
+// Helper function to get performance label based on score
+const getPerformanceLabel = (score: number): string => {
+  if (score >= 90) return "Outstanding";
+  if (score >= 80) return "Excellent";
+  if (score >= 70) return "Very Good";
+  if (score >= 60) return "Good";
+  if (score >= 50) return "Satisfactory";
+  return "Needs Improvement";
+};
+
 export default InterviewSession;
+
