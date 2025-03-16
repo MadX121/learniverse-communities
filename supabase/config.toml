@@ -1,1 +1,24 @@
+
+# This file is used to configure the Supabase project
+
 project_id = "boelelhhjjtxqgdeaako"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+
+[db]
+port = 54322
+
+[realtime]
+enabled = true
+
+[storage]
+enabled = true
+
+[functions]
+[functions.interview-assistant]
+verify_jwt = false
+[functions.whisper-transcribe]
+verify_jwt = false
