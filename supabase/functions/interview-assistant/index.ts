@@ -17,12 +17,13 @@ serve(async (req) => {
   }
 
   try {
-    const { sessionId, prompt, category, generateAudio = false } = await req.json();
+    const { sessionId, prompt, category, generateAudio = true, voiceAnalysis = false, voiceData = null } = await req.json();
 
     console.log(`Processing interview request for session ${sessionId}`);
     console.log(`Category: ${category}`);
     console.log(`Prompt: ${prompt.substring(0, 100)}...`);
     console.log(`Generate Audio: ${generateAudio}`);
+    console.log(`Voice Analysis: ${voiceAnalysis}`);
     
     // Create system prompt based on interview category
     let systemPrompt = "You are an expert technical interviewer. ";
@@ -62,10 +63,28 @@ serve(async (req) => {
         systemPrompt += `Focus on ${category} concepts and best practices.`;
     }
     
-    systemPrompt += " Provide realistic interview questions and detailed, constructive feedback on answers.";
+    if (voiceAnalysis) {
+      systemPrompt += " When analyzing the voice response, evaluate tone, fluency, confidence, and clarity. Provide detailed feedback on communication skills.";
+    } else {
+      systemPrompt += " Provide realistic interview questions and detailed, constructive feedback on answers.";
+    }
 
     console.log(`Using API key: ${openAIApiKey.substring(0, 5)}...`);
     console.log(`System prompt: ${systemPrompt}`);
+
+    // If we're analyzing voice data, include that in the prompt
+    let enhancedPrompt = prompt;
+    if (voiceAnalysis && voiceData) {
+      enhancedPrompt += `\n\nAdditionally, analyze the following aspects of the candidate's voice response:
+      - Confidence level: Did they sound confident or hesitant?
+      - Fluency: Was the speech smooth or filled with many pauses/filler words?
+      - Clarity: How well articulated and structured was the response?
+      - Tone: Was the tone professional, enthusiastic, nervous, etc.?
+      
+      The transcribed response is: "${voiceData}"
+      
+      Include this voice analysis in your feedback.`;
+    }
 
     // Call OpenAI API with streaming disabled for easier response handling
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -78,7 +97,7 @@ serve(async (req) => {
         model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: prompt }
+          { role: 'user', content: enhancedPrompt }
         ],
         temperature: 0.7,
         max_tokens: 1000,
@@ -101,6 +120,9 @@ serve(async (req) => {
     
     const aiResponse = data.choices[0].message.content;
     let audioContent = null;
+    let speechConfidence = null;
+    let speechFluency = null;
+    let speechClarity = null;
     
     // Generate speech from text if requested
     if (generateAudio) {
@@ -136,13 +158,43 @@ serve(async (req) => {
       }
     }
     
+    // If we did voice analysis, extract metrics from the response
+    if (voiceAnalysis) {
+      try {
+        // Try to find confidence score in the AI response
+        const confidenceMatch = aiResponse.match(/confidence.+?(\d+)/i);
+        if (confidenceMatch) {
+          speechConfidence = parseInt(confidenceMatch[1]);
+        }
+        
+        // Try to find fluency score in the AI response
+        const fluencyMatch = aiResponse.match(/fluency.+?(\d+)/i);
+        if (fluencyMatch) {
+          speechFluency = parseInt(fluencyMatch[1]);
+        }
+        
+        // Try to find clarity score in the AI response
+        const clarityMatch = aiResponse.match(/clarity.+?(\d+)/i);
+        if (clarityMatch) {
+          speechClarity = parseInt(clarityMatch[1]);
+        }
+      } catch (analysisError) {
+        console.error('Error parsing voice analysis metrics:', analysisError);
+      }
+    }
+    
     console.log(`Session ID: ${sessionId} - Processed interview response for category: ${category}`);
     console.log(`Response preview: ${aiResponse.substring(0, 100)}...`);
 
-    // Return the AI response and audio content
+    // Return the AI response, audio content, and voice metrics if analyzed
     return new Response(JSON.stringify({ 
       aiResponse, 
-      audioContent 
+      audioContent,
+      voiceMetrics: voiceAnalysis ? {
+        confidence: speechConfidence,
+        fluency: speechFluency,
+        clarity: speechClarity
+      } : null
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

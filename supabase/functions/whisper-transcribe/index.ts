@@ -38,6 +38,7 @@ serve(async (req) => {
     const formData = new FormData();
     formData.append('file', blob, 'audio.webm');
     formData.append('model', 'whisper-1');
+    formData.append('response_format', 'verbose_json');
 
     console.log("Calling OpenAI Whisper API to transcribe audio...");
 
@@ -61,7 +62,38 @@ serve(async (req) => {
     
     console.log("Transcription successful:", data);
 
-    return new Response(JSON.stringify({ transcription: data.text }), {
+    // Extract additional metrics from the verbose response if available
+    const segments = data.segments || [];
+    
+    // Calculate average word speed (words per minute)
+    let totalWords = 0;
+    let totalDuration = 0;
+    
+    segments.forEach(segment => {
+      // Rough word count by splitting on spaces
+      const wordCount = segment.text.trim().split(/\s+/).length;
+      totalWords += wordCount;
+      totalDuration += segment.end - segment.start;
+    });
+    
+    const wordsPerMinute = totalDuration > 0 ? Math.round((totalWords / totalDuration) * 60) : null;
+    
+    // Count filler words (um, uh, like, you know, etc.)
+    const fillerWordsRegex = /\b(um|uh|like|you know|i mean|so|actually|basically|literally|right)\b/gi;
+    const fillerWordsCount = (data.text.match(fillerWordsRegex) || []).length;
+    
+    // Count pauses (approximated by ellipses, commas, periods in the transcript)
+    const pausesCount = (data.text.match(/[,.…]/g) || []).length;
+
+    return new Response(JSON.stringify({ 
+      transcription: data.text,
+      speechMetrics: {
+        wordsPerMinute: wordsPerMinute,
+        fillerWords: fillerWordsCount,
+        pauses: pausesCount,
+        duration: totalDuration
+      }
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {

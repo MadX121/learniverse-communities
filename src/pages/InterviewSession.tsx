@@ -7,10 +7,12 @@ import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/components/ui/use-toast";
+import VoiceIndicator from "@/components/VoiceIndicator";
+import SpeechMetricsCard from "@/components/SpeechMetricsCard";
 import { 
   Mic, MicOff, Loader2, ArrowLeft, MessageSquare, Zap, 
   Award, Brain, BarChart3, VolumeX, Volume2, CirclePause, 
-  CirclePlay, BadgeCheck 
+  CirclePlay, BadgeCheck, Headphones 
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -30,6 +32,15 @@ interface Question {
   text: string;
   audioContent?: string;
   response?: string;
+  speechMetrics?: {
+    wordsPerMinute?: number;
+    fillerWords?: number;
+    pauses?: number;
+    duration?: number;
+    confidence?: number;
+    fluency?: number;
+    clarity?: number;
+  };
   evaluation?: {
     relevance: number;
     clarity: number;
@@ -61,6 +72,12 @@ const InterviewSession = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
+  const [isAiSpeaking, setIsAiSpeaking] = useState(false);
+  
+  // Voice UI state
+  const [voiceMode, setVoiceMode] = useState<'listening' | 'speaking' | 'processing' | null>(null);
+  const [autoPlay, setAutoPlay] = useState(true);
+  const [autoListen, setAutoListen] = useState(true);
   
   // Media recorder refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -87,19 +104,44 @@ const InterviewSession = () => {
   // Initialize audio element
   useEffect(() => {
     audioRef.current = new Audio();
+    
+    audioRef.current.addEventListener('play', () => {
+      setIsPlaying(true);
+      setIsAiSpeaking(true);
+      setVoiceMode('speaking');
+    });
+    
+    audioRef.current.addEventListener('pause', () => {
+      setIsPlaying(false);
+      setIsAiSpeaking(false);
+      setVoiceMode(null);
+    });
+    
     audioRef.current.addEventListener('ended', () => {
       setIsPlaying(false);
+      setIsAiSpeaking(false);
+      setVoiceMode(null);
+      
+      // Auto-start listening for user response after AI finishes speaking
+      if (autoListen && !questions[currentQuestionIndex]?.response) {
+        setTimeout(() => {
+          startRecording();
+        }, 1000);
+      }
     });
     
     return () => {
       if (audioRef.current) {
         audioRef.current.pause();
+        audioRef.current.removeEventListener('play', () => setIsPlaying(true));
+        audioRef.current.removeEventListener('pause', () => setIsPlaying(false));
         audioRef.current.removeEventListener('ended', () => {
           setIsPlaying(false);
+          setIsAiSpeaking(false);
         });
       }
     };
-  }, []);
+  }, [autoListen, currentQuestionIndex, questions]);
   
   // Set up audio URL when audioContent changes
   useEffect(() => {
@@ -111,7 +153,7 @@ const InterviewSession = () => {
       setAudioUrl(url);
       
       // Auto-play the audio when it's first loaded
-      if (audioRef.current && !muted) {
+      if (audioRef.current && !muted && autoPlay) {
         audioRef.current.src = url;
         audioRef.current.onloadedmetadata = () => {
           playAudio();
@@ -124,7 +166,7 @@ const InterviewSession = () => {
         URL.revokeObjectURL(audioUrl);
       }
     };
-  }, [questions, currentQuestionIndex]);
+  }, [questions, currentQuestionIndex, autoPlay, muted]);
   
   // Function to fetch session data
   const fetchSessionData = async () => {
@@ -163,11 +205,16 @@ const InterviewSession = () => {
   // Generate initial question based on category
   const generateInitialQuestion = async (category: string) => {
     try {
+      toast({
+        title: "Preparing your interview",
+        description: "The AI is preparing your first question...",
+      });
+      
       // Call our edge function to get a question with audio
       const response = await supabase.functions.invoke("interview-assistant", {
         body: {
           sessionId,
-          prompt: `You are conducting a ${category} interview. Provide a challenging first question that would be asked in this type of interview. Make it sound like a real interviewer is asking the question.`,
+          prompt: `You are conducting a ${category} interview. Provide a challenging first question that would be asked in this type of interview. Make it sound like a real interviewer is asking the question. Keep your question concise and direct.`,
           category,
           generateAudio: true
         }
@@ -184,6 +231,11 @@ const InterviewSession = () => {
           text: response.data.aiResponse,
           audioContent: response.data.audioContent
         }]);
+        
+        toast({
+          title: "Interview ready",
+          description: "Your first question is ready. The interviewer will speak to you.",
+        });
       } else {
         throw new Error("Failed to generate question: No response data");
       }
@@ -224,6 +276,7 @@ const InterviewSession = () => {
       audioRef.current.play()
         .then(() => {
           setIsPlaying(true);
+          setIsAiSpeaking(true);
         })
         .catch(err => {
           console.error("Error playing audio:", err);
@@ -241,6 +294,7 @@ const InterviewSession = () => {
     if (audioRef.current) {
       audioRef.current.pause();
       setIsPlaying(false);
+      setIsAiSpeaking(false);
     }
   };
   
@@ -284,10 +338,11 @@ const InterviewSession = () => {
       // Start recording
       mediaRecorder.start();
       setRecording(true);
+      setVoiceMode('listening');
       
       toast({
         title: "Recording started",
-        description: "Speak clearly into your microphone.",
+        description: "Speak clearly into your microphone to answer the question.",
       });
     } catch (error) {
       console.error("Error starting recording:", error);
@@ -304,6 +359,7 @@ const InterviewSession = () => {
     if (mediaRecorderRef.current && recording) {
       mediaRecorderRef.current.stop();
       setRecording(false);
+      setVoiceMode('processing');
       
       toast({
         title: "Recording stopped",
@@ -344,18 +400,20 @@ const InterviewSession = () => {
         }
 
         const transcribedText = transcribeResponse.data.transcription;
+        const speechMetrics = transcribeResponse.data.speechMetrics || {};
         setTranscription(transcribedText);
         
-        // Update the questions array with the response
+        // Update the questions array with the response and speech metrics
         const updatedQuestions = [...questions];
         updatedQuestions[currentQuestionIndex] = {
           ...updatedQuestions[currentQuestionIndex],
-          response: transcribedText
+          response: transcribedText,
+          speechMetrics: speechMetrics
         };
         setQuestions(updatedQuestions);
         
-        // Now, evaluate the response using ChatGPT
-        await evaluateResponse(transcribedText, updatedQuestions[currentQuestionIndex].text);
+        // Now, evaluate the response using ChatGPT with voice analysis
+        await evaluateResponse(transcribedText, updatedQuestions[currentQuestionIndex].text, speechMetrics);
       };
     } catch (error) {
       console.error("Error processing recording:", error);
@@ -365,13 +423,14 @@ const InterviewSession = () => {
         variant: "destructive"
       });
       setProcessingResponse(false);
+      setVoiceMode(null);
     }
   };
   
   // Evaluate the response using OpenAI
-  const evaluateResponse = async (response: string, question: string) => {
+  const evaluateResponse = async (response: string, question: string, speechMetrics: any = {}) => {
     try {
-      // Call our edge function to evaluate the response
+      // Call our edge function to evaluate the response with voice analysis
       const evalResponse = await supabase.functions.invoke("interview-assistant", {
         body: {
           sessionId,
@@ -387,7 +446,12 @@ const InterviewSession = () => {
           3. Confidence (0-100): How confident did the candidate seem in their answer?
           4. Overall (0-100): Overall impression of the response.
           
-          Also provide a short paragraph of feedback on what was good and how the response could be improved.
+          Also analyze the speech metrics:
+          - Words per minute: ${speechMetrics.wordsPerMinute || 'Not available'}
+          - Number of filler words: ${speechMetrics.fillerWords || 'Not available'}
+          - Number of pauses: ${speechMetrics.pauses || 'Not available'}
+          
+          Based on both the content and delivery, provide a short paragraph of feedback on what was good and how the response could be improved.
           
           Return your evaluation in this exact format:
           
@@ -397,7 +461,9 @@ const InterviewSession = () => {
           OVERALL: [score]
           FEEDBACK: [your detailed feedback paragraph]
           `,
-          category: session?.category || ""
+          category: session?.category || "",
+          voiceAnalysis: true,
+          voiceData: response
         }
       });
       
@@ -411,6 +477,7 @@ const InterviewSession = () => {
       }
       
       const aiResponseText = evalResponse.data.aiResponse;
+      const voiceMetrics = evalResponse.data.voiceMetrics || {};
       
       // Parse the evaluation
       const relevanceMatch = aiResponseText.match(/RELEVANCE: (\d+)/);
@@ -427,11 +494,17 @@ const InterviewSession = () => {
         feedback: feedbackMatch ? feedbackMatch[1].trim() : ""
       };
       
-      // Update the questions array with the evaluation
+      // Update the questions array with the evaluation and enhanced speech metrics
       const updatedQuestions = [...questions];
       updatedQuestions[currentQuestionIndex] = {
         ...updatedQuestions[currentQuestionIndex],
-        evaluation
+        evaluation,
+        speechMetrics: {
+          ...updatedQuestions[currentQuestionIndex].speechMetrics,
+          confidence: voiceMetrics?.confidence || updatedQuestions[currentQuestionIndex].speechMetrics?.confidence,
+          fluency: voiceMetrics?.fluency || updatedQuestions[currentQuestionIndex].speechMetrics?.fluency,
+          clarity: voiceMetrics?.clarity || updatedQuestions[currentQuestionIndex].speechMetrics?.clarity
+        }
       };
       setQuestions(updatedQuestions);
       
@@ -452,6 +525,7 @@ const InterviewSession = () => {
       });
     } finally {
       setProcessingResponse(false);
+      setVoiceMode(null);
     }
   };
   
@@ -462,6 +536,8 @@ const InterviewSession = () => {
     category: string
   ) => {
     try {
+      setVoiceMode('processing');
+      
       // Call our edge function to get the next question with audio
       const response = await supabase.functions.invoke("interview-assistant", {
         body: {
@@ -472,7 +548,7 @@ const InterviewSession = () => {
           
           The candidate's response was: "${prevResponse}"
           
-          Based on this, provide a logical follow-up question that would be asked in this type of interview. Make it sound natural as if a real interviewer is asking the question. The question should probe deeper or explore a different aspect relevant to the interview category.`,
+          Based on this, provide a logical follow-up question that would be asked in this type of interview. Make it sound natural as if a real interviewer is asking the question. The question should probe deeper or explore a different aspect relevant to the interview category. Keep your question concise and direct.`,
           category,
           generateAudio: true
         }
@@ -502,6 +578,11 @@ const InterviewSession = () => {
       
       // Reset audio URL for the new question
       setAudioUrl(null);
+      
+      toast({
+        title: "Next question ready",
+        description: "The interviewer will ask the next question now.",
+      });
     } catch (error) {
       console.error("Error generating next question:", error);
       toast({
@@ -509,6 +590,7 @@ const InterviewSession = () => {
         description: "Failed to generate next question. Please try again.",
         variant: "destructive"
       });
+      setVoiceMode(null);
     }
   };
   
@@ -540,9 +622,15 @@ const InterviewSession = () => {
           - Clarity: ${q.evaluation?.clarity || 0}/100
           - Confidence: ${q.evaluation?.confidence || 0}/100
           - Overall: ${q.evaluation?.overall || 0}/100
+          
+          Speech Metrics (if available):
+          - Words per minute: ${q.speechMetrics?.wordsPerMinute || 'Not available'}
+          - Filler words: ${q.speechMetrics?.fillerWords || 'Not available'}
+          - Confidence: ${q.speechMetrics?.confidence || 'Not available'}
+          - Clarity: ${q.speechMetrics?.clarity || 'Not available'}
           `).join("\n")}
           
-          Based on these answers, provide comprehensive feedback (about 3-4 paragraphs) on the candidate's performance, highlighting strengths and areas for improvement. The feedback should be constructive, specific, and actionable.`,
+          Based on both the content of the answers and the delivery (speech patterns, confidence, clarity), provide comprehensive feedback (about 3-4 paragraphs) on the candidate's performance, highlighting strengths and areas for improvement. The feedback should be constructive, specific, and actionable.`,
           category: session?.category || ""
         }
       });
@@ -726,6 +814,10 @@ const InterviewSession = () => {
                       </div>
                     )}
                     
+                    {question.speechMetrics && Object.keys(question.speechMetrics).length > 0 && (
+                      <SpeechMetricsCard metrics={question.speechMetrics} className="mb-6" />
+                    )}
+                    
                     {question.evaluation && (
                       <>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -868,18 +960,30 @@ const InterviewSession = () => {
                 <span className="font-medium">Voice Interview</span>
               </div>
               
-              {audioUrl && !processingResponse && (
-                <button
-                  onClick={isPlaying ? pauseAudio : playAudio}
-                  className="p-2 rounded-full bg-primary/20 hover:bg-primary/30 transition-colors"
-                >
-                  {isPlaying ? (
-                    <CirclePause className="h-5 w-5 text-primary" />
-                  ) : (
-                    <CirclePlay className="h-5 w-5 text-primary" />
-                  )}
-                </button>
-              )}
+              <div className="flex items-center gap-3">
+                {audioUrl && !processingResponse && (
+                  <button
+                    onClick={isPlaying ? pauseAudio : playAudio}
+                    className="p-2 rounded-full bg-primary/20 hover:bg-primary/30 transition-colors"
+                  >
+                    {isPlaying ? (
+                      <CirclePause className="h-5 w-5 text-primary" />
+                    ) : (
+                      <CirclePlay className="h-5 w-5 text-primary" />
+                    )}
+                  </button>
+                )}
+                
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setAutoPlay(!autoPlay)}
+                    className={`p-1.5 rounded ${autoPlay ? 'bg-primary/20 text-primary' : 'bg-white/5 text-white/40'} text-xs flex items-center gap-1`}
+                  >
+                    <Headphones className="h-3 w-3" />
+                    <span>Auto-play</span>
+                  </button>
+                </div>
+              </div>
             </div>
             
             <div 
@@ -920,6 +1024,17 @@ const InterviewSession = () => {
                         <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 inline-block border border-white/5 shadow-lg">
                           <p className="text-white/80">{question.response}</p>
                         </div>
+                      </motion.div>
+                    )}
+                    
+                    {/* Speech Metrics */}
+                    {question.speechMetrics && Object.keys(question.speechMetrics).length > 0 && question.response && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="ml-12 mt-2"
+                      >
+                        <SpeechMetricsCard metrics={question.speechMetrics} />
                       </motion.div>
                     )}
                     
@@ -973,8 +1088,15 @@ const InterviewSession = () => {
                 )}
               </AnimatePresence>
               
+              {/* Voice indicator */}
+              {voiceMode && (
+                <div className="flex justify-center py-4">
+                  <VoiceIndicator isActive={true} type={voiceMode} />
+                </div>
+              )}
+              
               {/* Processing indicator */}
-              {processingResponse && (
+              {processingResponse && !voiceMode && (
                 <div className="flex justify-center py-4">
                   <div className="flex items-center gap-2 text-sm text-primary/80">
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -986,7 +1108,7 @@ const InterviewSession = () => {
             
             <div className="p-6 border-t border-white/10 bg-black/30 flex justify-center">
               <AnimatePresence mode="wait">
-                {!recording && !processingResponse && questions[currentQuestionIndex] && !questions[currentQuestionIndex].response && (
+                {!recording && !processingResponse && questions[currentQuestionIndex] && !questions[currentQuestionIndex].response && !isAiSpeaking && (
                   <motion.div
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -1055,6 +1177,29 @@ const InterviewSession = () => {
                     </Button>
                   </motion.div>
                 )}
+                
+                {isAiSpeaking && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    transition={{ duration: 0.2 }}
+                    className="flex flex-col items-center gap-3"
+                  >
+                    <div className="text-center text-white/80">
+                      AI Interviewer is speaking...
+                    </div>
+                    <Button 
+                      onClick={pauseAudio}
+                      variant="secondary"
+                      size="sm"
+                      className="gap-2 shadow-sm"
+                    >
+                      <CirclePause className="h-4 w-4" />
+                      Pause
+                    </Button>
+                  </motion.div>
+                )}
               </AnimatePresence>
             </div>
           </div>
@@ -1062,11 +1207,11 @@ const InterviewSession = () => {
           <div className="text-sm text-white/70 bg-black/20 p-4 rounded-lg border border-white/5">
             <div className="flex items-center gap-2 mb-2">
               <Zap className="h-4 w-4 text-amber-400" />
-              <span>Listen to the interviewer's questions and respond clearly.</span>
+              <span>Listen to the interviewer's questions and respond clearly by voice.</span>
             </div>
             <div className="flex items-center gap-2">
               <Zap className="h-4 w-4 text-amber-400" />
-              <span>Click the play button to hear the question again if needed.</span>
+              <span>Your speech will be analyzed for confidence, clarity, and fluency.</span>
             </div>
           </div>
         </motion.div>
