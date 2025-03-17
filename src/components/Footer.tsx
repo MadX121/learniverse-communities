@@ -1,4 +1,3 @@
-
 import { NavLink } from "react-router-dom";
 import { Github, Twitter, Linkedin } from "lucide-react";
 
@@ -11,7 +10,7 @@ const Footer = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
           <div className="col-span-2">
             <NavLink to="/" className="text-xl font-display font-bold text-gradient">
-              learniverse
+              MadXMas
             </NavLink>
             <p className="mt-4 text-foreground/70 max-w-md">
               A comprehensive platform for students to build communities, develop projects, and prepare for interviews, all powered by AI.
@@ -86,7 +85,7 @@ const Footer = () => {
         
         <div className="mt-12 pt-8 border-t border-border flex flex-col md:flex-row justify-between items-center">
           <p className="text-foreground/60 text-sm">
-            &copy; {currentYear} Learniverse. All rights reserved.
+            &copy; {currentYear} MadXMas. All rights reserved.
           </p>
           <div className="mt-4 md:mt-0 flex space-x-6">
             <a href="#" className="text-foreground/60 hover:text-primary text-sm">

@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Menu, X, ChevronRight, LogOut, User } from "lucide-react";
@@ -79,7 +78,7 @@ const Navbar = () => {
               className="text-xl font-display font-bold text-gradient"
               onClick={() => setIsMobileMenuOpen(false)}
             >
-              learniverse
+              MadXMas
             </NavLink>
           </div>
           
@@ -181,7 +180,7 @@ const Navbar = () => {
               className="text-xl font-display font-bold text-gradient"
               onClick={() => setIsMobileMenuOpen(false)}
             >
-              learniverse
+              MadXMas
             </NavLink>
           </div>
           <div className="mt-8 flex-1">
