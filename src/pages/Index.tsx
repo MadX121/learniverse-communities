@@ -140,7 +140,8 @@ const Index = () => {
                     "Basic analytics"
                   ],
                   cta: "Get Started",
-                  featured: false
+                  featured: false,
+                  link: "/dashboard"
                 },
                 {
                   name: "Pro",
@@ -155,7 +156,8 @@ const Index = () => {
                     "Priority support"
                   ],
                   cta: "Get Pro",
-                  featured: true
+                  featured: true,
+                  link: "https://razorpay.me/@madxmas"
                 },
                 {
                   name: "Teams",
@@ -171,7 +173,8 @@ const Index = () => {
                     "Dedicated support"
                   ],
                   cta: "Contact Sales",
-                  featured: false
+                  featured: false,
+                  link: "/subscription"
                 }
               ].map((plan, index) => (
                 <div 
@@ -207,6 +210,13 @@ const Index = () => {
                           ? "bg-primary text-primary-foreground hover:bg-primary/90" 
                           : "bg-secondary text-foreground hover:bg-secondary/80"
                       }`}
+                      onClick={() => {
+                        if (plan.link.startsWith('http')) {
+                          window.open(plan.link, '_blank');
+                        } else {
+                          window.location.href = plan.link;
+                        }
+                      }}
                     >
                       {plan.cta}
                       {plan.featured && <ArrowRight className="ml-2 h-4 w-4" />}

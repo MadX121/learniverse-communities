@@ -137,8 +137,8 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const startProSubscription = () => {
-    // Open a modal with Razorpay payment link
-    const razorpayLink = "https://rzp.io/l/madxmas-pro";
+    // Update the Razorpay payment link
+    const razorpayLink = "https://razorpay.me/@madxmas";
     window.open(razorpayLink, "_blank");
     
     toast.info(
