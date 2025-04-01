@@ -14,6 +14,8 @@ import InterviewPrep from "./pages/InterviewPrep";
 import InterviewSession from "./pages/InterviewSession";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
+import Chat from "./pages/Chat";
+import Subscription from "./pages/Subscription";
 
 const queryClient = new QueryClient();
 
@@ -32,6 +34,8 @@ const App = () => (
             <Route path="/projects/:projectId" element={<ProjectDetails />} />
             <Route path="/interview-prep" element={<InterviewPrep />} />
             <Route path="/interview-prep/session/:sessionId" element={<InterviewSession />} />
+            <Route path="/chat" element={<Chat />} />
+            <Route path="/subscription" element={<Subscription />} />
             <Route path="/auth" element={<Auth />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />

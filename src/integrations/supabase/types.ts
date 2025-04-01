@@ -39,6 +39,76 @@ export type Database = {
         }
         Relationships: []
       }
+      chat_room_members: {
+        Row: {
+          chat_room_id: string
+          id: string
+          joined_at: string
+          last_read_at: string | null
+          user_id: string
+        }
+        Insert: {
+          chat_room_id: string
+          id?: string
+          joined_at?: string
+          last_read_at?: string | null
+          user_id: string
+        }
+        Update: {
+          chat_room_id?: string
+          id?: string
+          joined_at?: string
+          last_read_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_room_members_chat_room_id_fkey"
+            columns: ["chat_room_id"]
+            isOneToOne: false
+            referencedRelation: "chat_rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_rooms: {
+        Row: {
+          community_id: string | null
+          created_at: string
+          id: string
+          is_encrypted: boolean
+          name: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          community_id?: string | null
+          created_at?: string
+          id?: string
+          is_encrypted?: boolean
+          name: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          community_id?: string | null
+          created_at?: string
+          id?: string
+          is_encrypted?: boolean
+          name?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_rooms_community_id_fkey"
+            columns: ["community_id"]
+            isOneToOne: false
+            referencedRelation: "communities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       communities: {
         Row: {
           avatar_color: string | null
@@ -159,6 +229,53 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      messages: {
+        Row: {
+          chat_room_id: string
+          content: string | null
+          created_at: string
+          id: string
+          is_encrypted: boolean
+          is_read: boolean
+          media_type: string | null
+          media_url: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          chat_room_id: string
+          content?: string | null
+          created_at?: string
+          id?: string
+          is_encrypted?: boolean
+          is_read?: boolean
+          media_type?: string | null
+          media_url?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          chat_room_id?: string
+          content?: string | null
+          created_at?: string
+          id?: string
+          is_encrypted?: boolean
+          is_read?: boolean
+          media_type?: string | null
+          media_url?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_chat_room_id_fkey"
+            columns: ["chat_room_id"]
+            isOneToOne: false
+            referencedRelation: "chat_rooms"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -369,12 +486,143 @@ export type Database = {
         }
         Relationships: []
       }
+      user_presence: {
+        Row: {
+          id: string
+          is_typing: boolean
+          is_typing_in_room: string | null
+          last_active: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          is_typing?: boolean
+          is_typing_in_room?: string | null
+          last_active?: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          is_typing?: boolean
+          is_typing_in_room?: string | null
+          last_active?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_presence_is_typing_in_room_fkey"
+            columns: ["is_typing_in_room"]
+            isOneToOne: false
+            referencedRelation: "chat_rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_subscriptions: {
+        Row: {
+          amount: number | null
+          currency: string | null
+          expires_at: string | null
+          id: string
+          payment_id: string | null
+          payment_status: string | null
+          plan_type: string
+          starts_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number | null
+          currency?: string | null
+          expires_at?: string | null
+          id?: string
+          payment_id?: string | null
+          payment_status?: string | null
+          plan_type?: string
+          starts_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number | null
+          currency?: string | null
+          expires_at?: string | null
+          id?: string
+          payment_id?: string | null
+          payment_status?: string | null
+          plan_type?: string
+          starts_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_usage: {
+        Row: {
+          communities_joined: number
+          id: string
+          interviews_used: number
+          last_reset_date: string
+          projects_created: number
+          user_id: string
+        }
+        Insert: {
+          communities_joined?: number
+          id?: string
+          interviews_used?: number
+          last_reset_date?: string
+          projects_created?: number
+          user_id: string
+        }
+        Update: {
+          communities_joined?: number
+          id?: string
+          interviews_used?: number
+          last_reset_date?: string
+          projects_created?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_reached_free_tier_limit: {
+        Args: {
+          user_uuid: string
+          limit_type: string
+        }
+        Returns: boolean
+      }
+      is_pro_user: {
+        Args: {
+          user_uuid: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
