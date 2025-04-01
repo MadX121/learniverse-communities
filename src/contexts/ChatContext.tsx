@@ -5,58 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useStorage } from "@/hooks/useStorage";
 import { STORAGE_BUCKETS } from "@/lib/storage-utils";
-
-export interface ChatRoom {
-  id: string;
-  name: string;
-  type: "private" | "group" | "community";
-  created_at: string;
-  updated_at: string;
-  community_id?: string;
-  is_encrypted: boolean;
-}
-
-export interface ChatMember {
-  id: string;
-  chat_room_id: string;
-  user_id: string;
-  joined_at: string;
-  last_read_at: string | null;
-  profile?: {
-    full_name: string | null;
-    username: string | null;
-    avatar_url: string | null;
-    id: string;
-  };
-}
-
-export interface ChatMessage {
-  id: string;
-  chat_room_id: string;
-  user_id: string;
-  content: string | null;
-  media_url: string | null;
-  media_type: string | null;
-  is_encrypted: boolean;
-  created_at: string;
-  updated_at: string;
-  is_read: boolean;
-  sender?: {
-    full_name: string | null;
-    username: string | null;
-    avatar_url: string | null;
-    id: string;
-  };
-}
-
-export interface UserPresence {
-  id: string;
-  user_id: string;
-  status: "online" | "offline" | "away";
-  last_active: string;
-  is_typing: boolean;
-  is_typing_in_room: string | null;
-}
+import { ChatRoom, ChatMember, ChatMessage, UserPresence } from "@/lib/supabase-types";
 
 interface ChatContextType {
   rooms: ChatRoom[];
@@ -77,7 +26,7 @@ const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useAuth();
-  const { uploadFile } = useStorage();
+  const { uploadFile } = useStorage({ bucketName: STORAGE_BUCKETS.COMMUNITY });
   
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [currentRoom, setCurrentRoom] = useState<ChatRoom | null>(null);
@@ -112,7 +61,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       const formattedRooms = data.map(room => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { chat_room_members, ...roomData } = room;
-        return roomData as ChatRoom;
+        return roomData as unknown as ChatRoom;
       });
 
       setRooms(formattedRooms);
@@ -145,7 +94,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
 
-      setMessages(data as ChatMessage[]);
+      setMessages(data as unknown as ChatMessage[]);
     } catch (error) {
       console.error("Error in fetchMessages:", error);
       toast.error("Failed to load messages");
@@ -173,7 +122,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
 
-      setMembers(data as ChatMember[]);
+      setMembers(data as unknown as ChatMember[]);
     } catch (error) {
       console.error("Error in fetchMembers:", error);
       toast.error("Failed to load chat members");
@@ -187,14 +136,13 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     try {
       const { error } = await supabase
         .from("user_presence")
-        .upsert(
-          {
-            user_id: user.id,
-            status: "online",
-            last_active: new Date().toISOString(),
-          },
-          { onConflict: "user_id" }
-        );
+        .upsert({
+          user_id: user.id,
+          status: "online",
+          last_active: new Date().toISOString(),
+          is_typing: false,
+          is_typing_in_room: null
+        });
 
       if (error) {
         console.error("Error updating presence:", error);
@@ -211,16 +159,13 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     try {
       const { error } = await supabase
         .from("user_presence")
-        .upsert(
-          {
-            user_id: user.id,
-            status: "online",
-            last_active: new Date().toISOString(),
-            is_typing: isTyping,
-            is_typing_in_room: isTyping ? currentRoom.id : null,
-          },
-          { onConflict: "user_id" }
-        );
+        .upsert({
+          user_id: user.id,
+          status: "online",
+          last_active: new Date().toISOString(),
+          is_typing: isTyping,
+          is_typing_in_room: isTyping ? currentRoom.id : null
+        });
 
       if (error) {
         console.error("Error updating typing status:", error);
@@ -244,11 +189,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         const filePath = `${user.id}/${Date.now()}_${media.name}`;
         
         // Upload file and get URL
-        const uploadResult = await uploadFile(
-          STORAGE_BUCKETS.COMMUNITY,
-          filePath,
-          media
-        );
+        const uploadResult = await uploadFile(STORAGE_BUCKETS.COMMUNITY, filePath, media);
         
         if (uploadResult) {
           mediaUrl = `${STORAGE_BUCKETS.COMMUNITY}/${filePath}`;
@@ -265,6 +206,8 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
           media_url: mediaUrl,
           media_type: mediaType,
           is_encrypted: currentRoom.is_encrypted,
+          is_read: false,
+          updated_at: new Date().toISOString()
         });
 
       if (error) {
@@ -303,6 +246,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
           type,
           community_id: communityId,
           is_encrypted: false, // Default to non-encrypted
+          updated_at: new Date().toISOString()
         })
         .select()
         .single();
@@ -317,11 +261,9 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       const allMemberIds = [...new Set([user.id, ...memberIds])];
       
       const membersToInsert = allMemberIds.map(memberId => ({
-        chat_room_id: roomData.id,
+        chat_room_id: (roomData as unknown as ChatRoom).id,
         user_id: memberId,
         joined_at: new Date().toISOString(),
-        // Creator gets special status (first joiner)
-        ...(memberId === user.id && { is_creator: true }),
       }));
 
       const { error: membersError } = await supabase
@@ -336,14 +278,14 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         await supabase
           .from("chat_rooms")
           .delete()
-          .eq("id", roomData.id);
+          .eq("id", (roomData as unknown as ChatRoom).id);
           
         return null;
       }
 
       toast.success("Chat room created successfully");
       fetchRooms(); // Refresh rooms list
-      return roomData;
+      return roomData as unknown as ChatRoom;
     } catch (error) {
       console.error("Error in createRoom:", error);
       toast.error("Failed to create chat room");
@@ -448,7 +390,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
             filter: `chat_room_id=eq.${currentRoom.id}`,
           },
           async (payload) => {
-            const newMessage = payload.new as ChatMessage;
+            const newMessage = payload.new as unknown as ChatMessage;
             
             // Fetch sender details
             const { data: senderData } = await supabase
@@ -509,3 +451,5 @@ export const useChat = () => {
   }
   return context;
 };
+
+export type { ChatRoom, ChatMember, ChatMessage, UserPresence };

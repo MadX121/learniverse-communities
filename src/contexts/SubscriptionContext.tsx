@@ -3,32 +3,12 @@ import { createContext, useContext, useState, useEffect, ReactNode } from "react
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { UserSubscription, UserUsage } from "@/lib/supabase-types";
 
 export type SubscriptionTier = "free" | "pro";
 
-export interface SubscriptionData {
-  id: string;
-  user_id: string;
-  plan_type: SubscriptionTier;
-  starts_at: string;
-  expires_at: string | null;
-  payment_id: string | null;
-  payment_status: string | null;
-  amount: number | null;
-  currency: string | null;
-}
-
-export interface UserUsage {
-  id: string;
-  user_id: string;
-  communities_joined: number;
-  projects_created: number;
-  interviews_used: number;
-  last_reset_date: string;
-}
-
 interface SubscriptionContextType {
-  subscription: SubscriptionData | null;
+  subscription: UserSubscription | null;
   usage: UserUsage | null;
   isLoading: boolean;
   isPro: boolean;
@@ -41,7 +21,7 @@ const SubscriptionContext = createContext<SubscriptionContextType | undefined>(u
 
 export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useAuth();
-  const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
+  const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [usage, setUsage] = useState<UserUsage | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -66,7 +46,7 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
       if (subscriptionError) {
         console.error("Error fetching subscription:", subscriptionError);
       } else {
-        setSubscription(subscriptionData);
+        setSubscription(subscriptionData as unknown as UserSubscription);
       }
 
       // Fetch usage data
@@ -79,7 +59,7 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
       if (usageError) {
         console.error("Error fetching usage:", usageError);
       } else {
-        setUsage(usageData);
+        setUsage(usageData as unknown as UserUsage);
       }
     } catch (error) {
       console.error("Error in subscription data fetch:", error);
@@ -193,3 +173,5 @@ export const useSubscription = () => {
   }
   return context;
 };
+
+export type { UserSubscription as SubscriptionData, UserUsage };

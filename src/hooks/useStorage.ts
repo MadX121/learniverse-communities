@@ -1,5 +1,6 @@
 
 import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { listFiles, getFileUrl, deleteFile, STORAGE_BUCKETS } from "@/lib/storage-utils";
 
 interface StorageFile {
@@ -8,7 +9,7 @@ interface StorageFile {
   updated_at: string;
   created_at: string;
   last_accessed_at: string;
-  metadata: Record<string, any>; // Changed from specific shape to Record<string, any>
+  metadata: Record<string, any>;
   publicUrl: string;
 }
 
@@ -66,6 +67,28 @@ export function useStorage({
     }
   };
 
+  // Adding the missing uploadFile function
+  const uploadFile = async (bucketName: string, filePath: string, file: File) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from(bucketName)
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true
+        });
+
+      if (error) {
+        console.error("Error uploading file:", error);
+        throw error;
+      }
+
+      return data?.path || null;
+    } catch (err) {
+      console.error("Error in uploadFile:", err);
+      throw err;
+    }
+  };
+
   // Fetch files on mount if autoFetch is true
   useEffect(() => {
     if (autoFetch) {
@@ -79,6 +102,7 @@ export function useStorage({
     error,
     fetchFiles,
     removeFile,
+    uploadFile,  // Exposing the new uploadFile method
     bucketUrl: `${window.location.origin}/storage/v1/object/public/${bucketName}`,
   };
 }
