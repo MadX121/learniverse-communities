@@ -1,10 +1,9 @@
 
 import { useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useNavigate, useLocation } from "react-router-dom";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { supabase } from "@/integrations/supabase/client";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,7 +32,12 @@ const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { session } = useAuth();
+  const location = useLocation();
+  const { session, signIn, signUp } = useAuth();
+  
+  // Get the tab from URL query params (if any)
+  const searchParams = new URLSearchParams(location.search);
+  const defaultTab = searchParams.get('tab') === 'signup' ? 'signup' : 'signin';
   
   // If user is already logged in, redirect to dashboard
   if (session) {
@@ -62,10 +66,7 @@ const Auth = () => {
     try {
       setIsLoading(true);
       
-      const { error } = await supabase.auth.signInWithPassword({
-        email: values.email,
-        password: values.password,
-      });
+      const { error } = await signIn(values.email, values.password);
 
       if (error) {
         throw error;
@@ -76,8 +77,8 @@ const Auth = () => {
         description: "Welcome back!",
       });
       
-      navigate("/dashboard");
     } catch (error: any) {
+      console.error("Sign in error:", error);
       toast({
         title: "Login failed",
         description: error.message || "Failed to sign in. Please try again.",
@@ -92,16 +93,14 @@ const Auth = () => {
     try {
       setIsLoading(true);
       
-      const { error } = await supabase.auth.signUp({
-        email: values.email,
-        password: values.password,
-        options: {
-          data: {
-            username: values.username,
-            full_name: values.fullName,
-          },
-        },
-      });
+      const { error } = await signUp(
+        values.email, 
+        values.password, 
+        {
+          username: values.username,
+          full_name: values.fullName || "",
+        }
+      );
 
       if (error) {
         throw error;
@@ -115,6 +114,7 @@ const Auth = () => {
       // Clear the form
       signUpForm.reset();
     } catch (error: any) {
+      console.error("Sign up error:", error);
       toast({
         title: "Registration failed",
         description: error.message || "Failed to sign up. Please try again.",
@@ -130,7 +130,7 @@ const Auth = () => {
       <div className="w-full max-w-md">
         <h1 className="text-3xl font-bold text-center mb-8 text-gradient">learniverse</h1>
         
-        <Tabs defaultValue="signin" className="w-full">
+        <Tabs defaultValue={defaultTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-6">
             <TabsTrigger value="signin">Sign In</TabsTrigger>
             <TabsTrigger value="signup">Sign Up</TabsTrigger>
